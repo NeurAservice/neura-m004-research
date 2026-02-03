@@ -14,7 +14,7 @@ const i18n = {
 
   async setLocale(locale) {
     try {
-      const response = await fetch(`/locales/${locale}.json`);
+      const response = await fetch(`locales/${locale}.json`);
       if (!response.ok) throw new Error('Failed to load locale');
       this.translations = await response.json();
       this.locale = locale;
