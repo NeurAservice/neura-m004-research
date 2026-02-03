@@ -27,7 +27,7 @@ const api = {
 
   async getBalance() {
     const userId = this.getUserId();
-    const response = await fetch(`${this.baseUrl}/api/balance?user_id=${encodeURIComponent(userId)}`);
+    const response = await fetch(`${this.baseUrl}/balance?user_id=${encodeURIComponent(userId)}`);
 
     if (!response.ok) {
       const error = await response.json();
@@ -40,7 +40,7 @@ const api = {
   async startResearch(query, options = {}) {
     const userId = this.getUserId();
 
-    const response = await fetch(`${this.baseUrl}/api/research`, {
+    const response = await fetch(`${this.baseUrl}/research`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -61,7 +61,7 @@ const api = {
   },
 
   async submitClarification(researchId, answers) {
-    const response = await fetch(`${this.baseUrl}/api/research/${researchId}/clarify`, {
+    const response = await fetch(`${this.baseUrl}/research/${researchId}/clarify`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -78,7 +78,7 @@ const api = {
   },
 
   async getResearch(researchId) {
-    const response = await fetch(`${this.baseUrl}/api/research/${researchId}`);
+    const response = await fetch(`${this.baseUrl}/research/${researchId}`);
 
     if (!response.ok) {
       const error = await response.json();
@@ -91,7 +91,7 @@ const api = {
   async getHistory(limit = 20, offset = 0) {
     const userId = this.getUserId();
     const response = await fetch(
-      `${this.baseUrl}/api/research/user/history?user_id=${encodeURIComponent(userId)}&limit=${limit}&offset=${offset}`
+      `${this.baseUrl}/research/user/history?user_id=${encodeURIComponent(userId)}&limit=${limit}&offset=${offset}`
     );
 
     if (!response.ok) {
@@ -103,7 +103,7 @@ const api = {
   },
 
   getExportUrl(researchId, format) {
-    return `${this.baseUrl}/api/research/${researchId}/export?format=${format}`;
+    return `${this.baseUrl}/research/${researchId}/export?format=${format}`;
   }
 };
 
