@@ -157,13 +157,18 @@ const app = {
   },
 
   toggleBalancePopover() {
+    console.log('[M004] Balance toggle clicked');
     const popover = document.getElementById('balance-popover');
     if (popover) {
       const isHidden = popover.hidden;
+      console.log('[M004] Popover was hidden:', isHidden);
       popover.hidden = !isHidden;
+      console.log('[M004] Popover now hidden:', popover.hidden);
       if (!popover.hidden) {
         this.fetchBalance();
       }
+    } else {
+      console.error('[M004] Balance popover element not found!');
     }
   },
 
@@ -175,6 +180,7 @@ const app = {
   },
 
   async fetchBalance() {
+    console.log('[M004] Fetching balance...');
     const valueEl = document.getElementById('balance-value');
     const updatedEl = document.getElementById('balance-updated');
     const topupBtn = document.getElementById('balance-topup');
@@ -195,15 +201,19 @@ const app = {
         url += `&shell_id=${encodeURIComponent(shellId)}`;
       }
 
+      console.log('[M004] Balance URL:', url);
       const response = await fetch(url);
       const result = await response.json();
+      console.log('[M004] Balance response:', result);
 
       if (result.status === 'success' && result.data) {
         const balance = result.data.balance;
         this.topupUrl = result.data.topup_url || null;
 
+        console.log('[M004] Balance value:', balance, 'Topup URL:', this.topupUrl);
         if (valueEl) {
           valueEl.textContent = balance.toFixed(2);
+          console.log('[M004] Set balance text to:', balance.toFixed(2));
         }
         if (updatedEl) {
           updatedEl.textContent = `${i18n.t('balance.updatedAt')}: ${new Date().toLocaleTimeString(i18n.locale === 'ru' ? 'ru-RU' : 'en-US')}`;
