@@ -58,6 +58,7 @@ export interface BillingFinishResponse {
 }
 
 export interface WalletBalanceResponse {
+  user_id?: string;
   balance: number;
   currency: string;
   topup_url?: string;
