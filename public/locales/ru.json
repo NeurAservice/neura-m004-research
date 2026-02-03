@@ -1,0 +1,101 @@
+{
+  "app": {
+    "title": "NeurA Research",
+    "subtitle": "Глубокий анализ с верификацией"
+  },
+  "header": {
+    "balance": "Баланс",
+    "history": "История",
+    "newResearch": "Новое исследование"
+  },
+  "balance": {
+    "title": "Ваш баланс",
+    "credits": "кредитов",
+    "refresh": "Обновить",
+    "topup": "Пополнить",
+    "loading": "Загрузка...",
+    "error": "Ошибка загрузки баланса"
+  },
+  "research": {
+    "queryLabel": "Тема исследования",
+    "queryPlaceholder": "Введите вопрос или тему для исследования...",
+    "options": {
+      "mode": "Режим",
+      "modeStandard": "Стандартный",
+      "modeDeep": "Глубокий",
+      "modeQuick": "Быстрый",
+      "type": "Тип",
+      "typeFactsAndAnalysis": "Факты и анализ",
+      "typeComparison": "Сравнение",
+      "typeTrends": "Тренды",
+      "typeHowTo": "Инструкция",
+      "language": "Язык",
+      "languageRu": "Русский",
+      "languageEn": "English"
+    },
+    "startButton": "Начать исследование",
+    "stopButton": "Остановить"
+  },
+  "progress": {
+    "preparing": "Подготовка...",
+    "triage": "Анализ запроса",
+    "clarification": "Уточнение",
+    "planning": "Планирование",
+    "researching": "Исследование",
+    "verification": "Верификация",
+    "output": "Формирование отчёта"
+  },
+  "phases": {
+    "triage": "Анализ",
+    "clarification": "Уточнение",
+    "planning": "План",
+    "research": "Поиск",
+    "verification": "Проверка",
+    "output": "Отчёт"
+  },
+  "clarification": {
+    "title": "Уточните ваш запрос",
+    "subtitle": "Ответьте на вопросы для более точного исследования",
+    "submit": "Продолжить"
+  },
+  "result": {
+    "title": "Результат исследования",
+    "quality": "Качество",
+    "qualityHigh": "Высокое",
+    "qualityMedium": "Среднее",
+    "qualityLow": "Низкое",
+    "sources": "Источники",
+    "verifiedFacts": "Проверенные факты",
+    "export": "Экспорт",
+    "exportMarkdown": "Markdown",
+    "exportJson": "JSON",
+    "exportPdf": "PDF"
+  },
+  "history": {
+    "title": "История исследований",
+    "empty": "История пуста",
+    "loadMore": "Загрузить ещё"
+  },
+  "status": {
+    "completed": "Завершено",
+    "in_progress": "В процессе",
+    "failed": "Ошибка",
+    "clarification_needed": "Требуется уточнение"
+  },
+  "errors": {
+    "unknown": "Произошла неизвестная ошибка",
+    "network": "Ошибка сети. Проверьте подключение.",
+    "insufficientBalance": "Недостаточно средств на балансе",
+    "validationError": "Ошибка валидации",
+    "serverError": "Ошибка сервера"
+  },
+  "common": {
+    "loading": "Загрузка...",
+    "retry": "Повторить",
+    "cancel": "Отмена",
+    "close": "Закрыть",
+    "save": "Сохранить",
+    "copy": "Копировать",
+    "copied": "Скопировано!"
+  }
+}

@@ -1,0 +1,26 @@
+version: "3.8"
+
+services:
+  m004:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: neura-m004-dev
+    ports:
+      - "3004:3004"
+    environment:
+      - NODE_ENV=development
+    env_file:
+      - .env
+    volumes:
+      - ./src:/app/src:ro
+      - ./public:/app/public:ro
+      - ./data:/app/data
+      - ./logs:/app/logs
+    networks:
+      - neura-network
+    restart: unless-stopped
+
+networks:
+  neura-network:
+    external: true

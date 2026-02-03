@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>История — NeurA Research</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="header">
+      <a href="/" class="header-logo">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+        </svg>
+        <h1 data-i18n="app.title">NeurA Research</h1>
+      </a>
+
+      <div class="header-actions">
+        <a href="/" class="btn btn-primary btn-sm" data-i18n="header.newResearch">Новое исследование</a>
+
+        <!-- Balance Widget -->
+        <div class="balance-widget">
+          <button id="balance-trigger" class="balance-trigger">
+            <svg viewBox="0 0 24 24">
+              <path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
+            </svg>
+            <span data-i18n="header.balance">Баланс</span>
+          </button>
+
+          <div id="balance-popover" class="balance-popover">
+            <div class="balance-popover-header">
+              <h3 data-i18n="balance.title">Ваш баланс</h3>
+              <button id="balance-close" class="balance-popover-close">×</button>
+            </div>
+            <div class="balance-popover-body">
+              <div id="balance-amount" class="balance-amount" data-i18n="balance.loading">Загрузка...</div>
+              <div class="balance-actions">
+                <button id="refresh-balance" class="btn btn-secondary btn-sm" data-i18n="balance.refresh">Обновить</button>
+                <a id="topup-btn" href="#" class="btn btn-primary btn-sm hidden" target="_blank" data-i18n="balance.topup">Пополнить</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <div class="card">
+        <div class="card-header">
+          <h2 data-i18n="history.title">История исследований</h2>
+        </div>
+        <div class="card-body">
+          <div id="history-list" class="history-list">
+            <p class="text-center text-muted" data-i18n="common.loading">Загрузка...</p>
+          </div>
+
+          <button id="load-more" class="btn btn-secondary mt-2 hidden" onclick="history.loadMore()" data-i18n="history.loadMore">
+            Загрузить ещё
+          </button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="/js/i18n.js"></script>
+  <script src="/js/api.js"></script>
+  <script>
+    const historyPage = {
+      items: [],
+      total: 0,
+      offset: 0,
+      limit: 20,
+
+      async init() {
+        await i18n.init();
+        this.bindEvents();
+        await this.loadHistory();
+      },
+
+      bindEvents() {
+        // Balance widget
+        const balanceTrigger = document.getElementById('balance-trigger');
+        if (balanceTrigger) {
+          balanceTrigger.addEventListener('click', () => this.toggleBalancePopover());
+        }
+
+        const balanceClose = document.getElementById('balance-close');
+        if (balanceClose) {
+          balanceClose.addEventListener('click', () => this.closeBalancePopover());
+        }
+
+        const refreshBalance = document.getElementById('refresh-balance');
+        if (refreshBalance) {
+          refreshBalance.addEventListener('click', () => this.fetchBalance());
+        }
+
+        document.addEventListener('click', (e) => {
+          const popover = document.getElementById('balance-popover');
+          const trigger = document.getElementById('balance-trigger');
+          if (popover && !popover.contains(e.target) && !trigger.contains(e.target)) {
+            this.closeBalancePopover();
+          }
+        });
+      },
+
+      toggleBalancePopover() {
+        const popover = document.getElementById('balance-popover');
+        if (popover) {
+          popover.classList.toggle('open');
+          if (popover.classList.contains('open')) {
+            this.fetchBalance();
+          }
+        }
+      },
+
+      closeBalancePopover() {
+        const popover = document.getElementById('balance-popover');
+        if (popover) popover.classList.remove('open');
+      },
+
+      async fetchBalance() {
+        const amountEl = document.getElementById('balance-amount');
+        const topupBtn = document.getElementById('topup-btn');
+
+        if (amountEl) amountEl.textContent = i18n.t('balance.loading');
+
+        try {
+          const result = await api.getBalance();
+          if (amountEl && result.data) {
+            amountEl.textContent = `${result.data.balance} ${i18n.t('balance.credits')}`;
+          }
+          if (topupBtn && result.data?.topup_url) {
+            topupBtn.href = result.data.topup_url;
+            topupBtn.classList.remove('hidden');
+          }
+        } catch (error) {
+          if (amountEl) amountEl.textContent = i18n.t('balance.error');
+        }
+      },
+
+      async loadHistory() {
+        const listEl = document.getElementById('history-list');
+        const loadMoreBtn = document.getElementById('load-more');
+
+        try {
+          const result = await api.getHistory(this.limit, this.offset);
+
+          if (result.data) {
+            this.items = [...this.items, ...result.data.items];
+            this.total = result.data.total;
+            this.offset += result.data.items.length;
+
+            this.render();
+
+            if (loadMoreBtn) {
+              loadMoreBtn.classList.toggle('hidden', this.items.length >= this.total);
+            }
+          }
+        } catch (error) {
+          if (listEl) {
+            listEl.innerHTML = `<p class="text-center text-muted">${i18n.t('errors.network')}</p>`;
+          }
+        }
+      },
+
+      async loadMore() {
+        await this.loadHistory();
+      },
+
+      render() {
+        const listEl = document.getElementById('history-list');
+        if (!listEl) return;
+
+        if (this.items.length === 0) {
+          listEl.innerHTML = `<p class="text-center text-muted">${i18n.t('history.empty')}</p>`;
+          return;
+        }
+
+        listEl.innerHTML = this.items.map(item => `
+          <a href="/?research=${item.id}" class="history-item">
+            <div class="history-item-content">
+              <div class="history-item-query">${this.escapeHtml(item.query)}</div>
+              <div class="history-item-meta">
+                <span>${this.formatDate(item.created_at)}</span>
+                ${item.quality_score ? `<span>${Math.round(item.quality_score * 100)}% качество</span>` : ''}
+              </div>
+            </div>
+            <span class="history-item-status ${item.status}">${i18n.t('status.' + item.status)}</span>
+          </a>
+        `).join('');
+      },
+
+      formatDate(dateStr) {
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('ru-RU', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      },
+
+      escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      historyPage.init();
+    });
+
+    window.history = historyPage;
+  </script>
+</body>
+</html>

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NeurA Research — Глубокий анализ с верификацией</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="header">
+      <a href="/" class="header-logo">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+        </svg>
+        <h1 data-i18n="app.title">NeurA Research</h1>
+      </a>
+
+      <div class="header-actions">
+        <a href="/history.html" class="btn btn-secondary btn-sm" data-i18n="header.history">История</a>
+
+        <!-- Balance Widget -->
+        <div class="balance-widget">
+          <button id="balance-trigger" class="balance-trigger">
+            <svg viewBox="0 0 24 24">
+              <path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
+            </svg>
+            <span data-i18n="header.balance">Баланс</span>
+          </button>
+
+          <div id="balance-popover" class="balance-popover">
+            <div class="balance-popover-header">
+              <h3 data-i18n="balance.title">Ваш баланс</h3>
+              <button id="balance-close" class="balance-popover-close">×</button>
+            </div>
+            <div class="balance-popover-body">
+              <div id="balance-amount" class="balance-amount" data-i18n="balance.loading">Загрузка...</div>
+              <div class="balance-actions">
+                <button id="refresh-balance" class="btn btn-secondary btn-sm" data-i18n="balance.refresh">Обновить</button>
+                <a id="topup-btn" href="#" class="btn btn-primary btn-sm hidden" target="_blank" data-i18n="balance.topup">Пополнить</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Research Form Card -->
+      <div class="card">
+        <div class="card-header">
+          <h2 data-i18n="header.newResearch">Новое исследование</h2>
+        </div>
+        <div class="card-body">
+          <form id="research-form" class="research-form">
+            <div class="form-group">
+              <label for="query-input" data-i18n="research.queryLabel">Тема исследования</label>
+              <textarea
+                id="query-input"
+                class="form-control"
+                data-i18n-placeholder="research.queryPlaceholder"
+                placeholder="Введите вопрос или тему для исследования..."
+                required
+              ></textarea>
+            </div>
+
+            <div class="options-grid">
+              <div class="option-select">
+                <label for="mode-select" data-i18n="research.options.mode">Режим</label>
+                <select id="mode-select" class="form-control">
+                  <option value="standard" data-i18n="research.options.modeStandard">Стандартный</option>
+                  <option value="deep" data-i18n="research.options.modeDeep">Глубокий</option>
+                  <option value="quick" data-i18n="research.options.modeQuick">Быстрый</option>
+                </select>
+              </div>
+
+              <div class="option-select">
+                <label for="type-select" data-i18n="research.options.type">Тип</label>
+                <select id="type-select" class="form-control">
+                  <option value="facts_and_analysis" data-i18n="research.options.typeFactsAndAnalysis">Факты и анализ</option>
+                  <option value="comparison" data-i18n="research.options.typeComparison">Сравнение</option>
+                  <option value="trends" data-i18n="research.options.typeTrends">Тренды</option>
+                  <option value="how_to" data-i18n="research.options.typeHowTo">Инструкция</option>
+                </select>
+              </div>
+
+              <div class="option-select">
+                <label for="language-select" data-i18n="research.options.language">Язык</label>
+                <select id="language-select" class="form-control">
+                  <option value="ru" data-i18n="research.options.languageRu">Русский</option>
+                  <option value="en" data-i18n="research.options.languageEn">English</option>
+                </select>
+              </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-lg" data-i18n="research.startButton">
+              Начать исследование
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Progress Container -->
+      <div id="progress-container" class="card mt-3 hidden">
+        <div class="card-body">
+          <div class="phase-indicator">
+            <span class="phase-badge" data-phase="triage" data-i18n="phases.triage">Анализ</span>
+            <span class="phase-badge" data-phase="clarification" data-i18n="phases.clarification">Уточнение</span>
+            <span class="phase-badge" data-phase="planning" data-i18n="phases.planning">План</span>
+            <span class="phase-badge" data-phase="research" data-i18n="phases.research">Поиск</span>
+            <span class="phase-badge" data-phase="verification" data-i18n="phases.verification">Проверка</span>
+            <span class="phase-badge" data-phase="output" data-i18n="phases.output">Отчёт</span>
+          </div>
+
+          <div class="progress-container">
+            <div class="progress-bar-wrapper">
+              <div id="progress-bar" class="progress-bar" style="width: 0%"></div>
+            </div>
+            <div class="progress-info">
+              <span id="progress-text" data-i18n="progress.preparing">Подготовка...</span>
+              <span id="progress-percent">0%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Clarification Container -->
+      <div id="clarification-container" class="clarification-card hidden">
+        <h3 data-i18n="clarification.title">Уточните ваш запрос</h3>
+        <p class="text-muted mb-2" data-i18n="clarification.subtitle">Ответьте на вопросы для более точного исследования</p>
+
+        <div id="clarification-questions" class="clarification-questions"></div>
+
+        <button onclick="app.submitClarification()" class="btn btn-primary mt-2" data-i18n="clarification.submit">
+          Продолжить
+        </button>
+      </div>
+
+      <!-- Result Container -->
+      <div id="result-container" class="research-result hidden">
+        <div class="card">
+          <div class="card-header">
+            <div class="result-header">
+              <h2 data-i18n="result.title">Результат исследования</h2>
+              <div style="display: flex; align-items: center; gap: 1rem;">
+                <span id="quality-badge" class="quality-badge"></span>
+                <div class="btn-group">
+                  <a id="export-md" href="#" class="btn btn-secondary btn-sm" download data-i18n="result.exportMarkdown">Markdown</a>
+                  <a id="export-json" href="#" class="btn btn-secondary btn-sm" download data-i18n="result.exportJson">JSON</a>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div id="report-content" class="report-content"></div>
+
+            <div class="sources-section">
+              <h3 data-i18n="result.sources">Источники</h3>
+              <div id="sources-list" class="sources-list"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="/js/i18n.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

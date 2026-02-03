@@ -1,0 +1,11 @@
+node_modules
+dist
+logs
+*.log
+.env
+.git
+.gitignore
+*.md
+tests
+coverage
+.nyc_output

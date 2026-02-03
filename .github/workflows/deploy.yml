@@ -1,0 +1,41 @@
+name: Deploy M004
+
+on:
+    push:
+        branches: [main]
+    workflow_dispatch:
+
+jobs:
+    deploy:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Set up SSH
+              run: |
+                  mkdir -p ~/.ssh
+                  echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+                  chmod 600 ~/.ssh/id_rsa
+                  ssh-keyscan -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+            - name: Deploy to server
+              env:
+                  HOST: ${{ secrets.SSH_HOST }}
+                  PORT: ${{ secrets.SSH_PORT }}
+                  USER: ${{ secrets.SSH_USER }}
+              run: |
+                  # Обновляем код через git pull
+                  ssh -p $PORT $USER@$HOST "cd /opt/neura/m004 && git fetch origin main && git reset --hard origin/main"
+
+                  # Собираем и перезапускаем
+                  ssh -p $PORT $USER@$HOST "cd /opt/neura/m004 && docker compose down && docker compose up --build -d"
+
+                  # Ждём запуска
+                  sleep 15
+
+                  # Проверяем health
+                  ssh -p $PORT $USER@$HOST "curl -sf http://localhost:3004/health || exit 1"
+
+                  echo "✅ Deploy successful!"

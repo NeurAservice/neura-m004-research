@@ -1,0 +1,101 @@
+{
+  "app": {
+    "title": "NeurA Research",
+    "subtitle": "Deep analysis with verification"
+  },
+  "header": {
+    "balance": "Balance",
+    "history": "History",
+    "newResearch": "New research"
+  },
+  "balance": {
+    "title": "Your balance",
+    "credits": "credits",
+    "refresh": "Refresh",
+    "topup": "Top up",
+    "loading": "Loading...",
+    "error": "Failed to load balance"
+  },
+  "research": {
+    "queryLabel": "Research topic",
+    "queryPlaceholder": "Enter a question or topic to research...",
+    "options": {
+      "mode": "Mode",
+      "modeStandard": "Standard",
+      "modeDeep": "Deep",
+      "modeQuick": "Quick",
+      "type": "Type",
+      "typeFactsAndAnalysis": "Facts & Analysis",
+      "typeComparison": "Comparison",
+      "typeTrends": "Trends",
+      "typeHowTo": "How-to",
+      "language": "Language",
+      "languageRu": "Russian",
+      "languageEn": "English"
+    },
+    "startButton": "Start research",
+    "stopButton": "Stop"
+  },
+  "progress": {
+    "preparing": "Preparing...",
+    "triage": "Analyzing query",
+    "clarification": "Clarification",
+    "planning": "Planning",
+    "researching": "Researching",
+    "verification": "Verification",
+    "output": "Generating report"
+  },
+  "phases": {
+    "triage": "Analysis",
+    "clarification": "Clarify",
+    "planning": "Plan",
+    "research": "Search",
+    "verification": "Verify",
+    "output": "Report"
+  },
+  "clarification": {
+    "title": "Clarify your request",
+    "subtitle": "Answer questions for more accurate research",
+    "submit": "Continue"
+  },
+  "result": {
+    "title": "Research result",
+    "quality": "Quality",
+    "qualityHigh": "High",
+    "qualityMedium": "Medium",
+    "qualityLow": "Low",
+    "sources": "Sources",
+    "verifiedFacts": "Verified facts",
+    "export": "Export",
+    "exportMarkdown": "Markdown",
+    "exportJson": "JSON",
+    "exportPdf": "PDF"
+  },
+  "history": {
+    "title": "Research history",
+    "empty": "History is empty",
+    "loadMore": "Load more"
+  },
+  "status": {
+    "completed": "Completed",
+    "in_progress": "In progress",
+    "failed": "Failed",
+    "clarification_needed": "Clarification needed"
+  },
+  "errors": {
+    "unknown": "An unknown error occurred",
+    "network": "Network error. Check your connection.",
+    "insufficientBalance": "Insufficient balance",
+    "validationError": "Validation error",
+    "serverError": "Server error"
+  },
+  "common": {
+    "loading": "Loading...",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "close": "Close",
+    "save": "Save",
+    "copy": "Copy",
+    "copied": "Copied!"
+  }
+}

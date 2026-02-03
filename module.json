@@ -1,0 +1,26 @@
+{
+  "id": "m004",
+  "name": "NeurA Research",
+  "nameRu": "NeurA Research",
+  "nameEn": "NeurA Research",
+  "version": "1.0.0",
+  "description": "Модуль глубоких верифицированных исследований",
+  "descriptionRu": "Модуль глубоких верифицированных исследований с проверкой фактов",
+  "descriptionEn": "Deep research module with fact verification",
+  "port": 3004,
+  "healthEndpoint": "/health",
+  "author": "NeurA Team",
+  "features": [
+    "Глубокие исследования с верификацией",
+    "Multi-model pipeline (Perplexity + Claude)",
+    "Source Authority Scoring",
+    "Экспорт в Markdown/PDF/JSON",
+    "Internal API для других модулей"
+  ],
+  "aiModels": [
+    "perplexity/sonar-pro",
+    "anthropic/claude-sonnet-4"
+  ],
+  "minBalance": 50,
+  "multiplier": 1.0
+}

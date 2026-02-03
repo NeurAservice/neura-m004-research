@@ -1,0 +1,265 @@
+/**
+ * @file src/types/research.ts
+ * @description Типы для исследований
+ * @context Основные интерфейсы для pipeline исследований
+ */
+
+// ============================================
+// Базовые типы
+// ============================================
+
+export type QueryType = 'factual' | 'analytical' | 'speculative' | 'mixed';
+export type ResearchMode = 'simple' | 'standard';
+export type ModeSource = 'auto' | 'user';
+export type ResearchType = 'facts_only' | 'facts_and_analysis' | 'full';
+export type ReportLength = 'short' | 'medium' | 'long';
+export type ClaimStatus = 'verified' | 'partially_correct' | 'incorrect' | 'unverifiable' | 'omitted';
+export type ClaimType = 'factual' | 'analytical' | 'speculative';
+export type ResearchStatus = 'pending' | 'in_progress' | 'clarification_needed' | 'completed' | 'failed' | 'cancelled';
+
+// ============================================
+// Options и настройки
+// ============================================
+
+export interface ResearchOptions {
+  mode: ResearchMode | 'auto';
+  researchType: ResearchType;
+  includeUnverified: boolean;
+  confidenceThreshold: number;
+  language: 'ru' | 'en';
+  maxReportLength: ReportLength;
+}
+
+export const DEFAULT_OPTIONS: ResearchOptions = {
+  mode: 'auto',
+  researchType: 'facts_and_analysis',
+  includeUnverified: false,
+  confidenceThreshold: 0.80,
+  language: 'ru',
+  maxReportLength: 'medium',
+};
+
+// ============================================
+// Triage (Phase 0)
+// ============================================
+
+export interface TriageResult {
+  queryType: QueryType;
+  mode: ResearchMode;
+  modeSource: ModeSource;
+  estimatedQuestions: number;
+  estimatedCost: { min: number; max: number };
+  estimatedDuration: { min: number; max: number }; // секунды
+}
+
+// ============================================
+// Clarification (Phase 1)
+// ============================================
+
+export interface ClarificationResult {
+  status: 'ready' | 'needs_clarification';
+  questions?: string[];
+  clarifiedQuery?: string;
+}
+
+// ============================================
+// Planning (Phase 2)
+// ============================================
+
+export interface ResearchQuestion {
+  id: number;
+  text: string;
+  type: ClaimType;
+  priority: number;
+  expectedFactTypes: string[];
+}
+
+export interface VerificationRequirement {
+  minSources: number;
+  requiredSourceTypes: string[];
+  freshnessRequired: boolean;
+}
+
+export interface PlanningResult {
+  questions: ResearchQuestion[];
+  scope: string;
+  factTypes: string[];
+  verificationStrategy: Record<string, VerificationRequirement>;
+}
+
+// ============================================
+// Research (Phase 3)
+// ============================================
+
+export interface Citation {
+  url: string;
+  title: string;
+  snippet: string;
+  authorityScore: number;
+  date?: string;
+  domain: string;
+}
+
+export interface ResearchQuestionResult {
+  questionId: number;
+  response: string;
+  citations: Citation[];
+  tokensUsed: { input: number; output: number };
+}
+
+// ============================================
+// Verification (Phase 4)
+// ============================================
+
+export interface AtomicClaim {
+  id: number;
+  text: string;
+  type: ClaimType;
+  sourceQuestionId: number;
+  originalContext: string;
+}
+
+export interface VerificationResult {
+  claimId: number;
+  status: ClaimStatus;
+  confidence: number;
+  correction?: string;
+  verificationSources: Citation[];
+  explanation?: string;
+}
+
+// ============================================
+// Output (Phase 5)
+// ============================================
+
+export interface Claim {
+  id: number;
+  text: string;
+  type: ClaimType;
+  status: ClaimStatus;
+  confidence: number;
+  correction?: string;
+  sourceIds: number[];
+  omitReason?: string;
+}
+
+export interface Source {
+  id: number;
+  url: string;
+  title: string;
+  domain: string;
+  authority: number;
+  date?: string;
+  usedInClaims: number[];
+}
+
+export interface QualityMetrics {
+  compositeScore: number;
+  verificationPassRate: number;
+  citationCoverage: number;
+  sourceAuthorityScore: number;
+  correctionRate: number;
+  facts: {
+    total: number;
+    verified: number;
+    partiallyCorrect: number;
+    unverified: number;
+    omitted: number;
+  };
+}
+
+export interface UsageData {
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCostUsd: number;
+  byModel: Array<{
+    model: string;
+    provider: string;
+    input: number;
+    output: number;
+    cost: number;
+  }>;
+  apiCalls: number;
+}
+
+export interface ResearchMetadata {
+  mode: ResearchMode;
+  queryType: QueryType;
+  language: string;
+  createdAt: string;
+  completedAt?: string;
+  duration_ms?: number;
+  pipeline_version: string;
+}
+
+export interface ResearchOutput {
+  report: string;
+  summary: string;
+  claims: Claim[];
+  sources: Source[];
+  quality: QualityMetrics;
+  metadata: ResearchMetadata;
+  disclaimer?: string;
+}
+
+// ============================================
+// Full Research Result
+// ============================================
+
+export interface ResearchResult {
+  id: string;
+  user_id: string;
+  session_id?: string;
+  query: string;
+  clarifiedQuery?: string;
+  options: ResearchOptions;
+  status: ResearchStatus;
+  progress: number;
+  currentPhase?: string;
+
+  // Результат (заполняется по завершении)
+  output?: ResearchOutput;
+
+  // Usage для биллинга
+  usage?: UsageData;
+
+  // Ошибка (если failed)
+  error?: string;
+
+  // Timestamps
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+}
+
+// ============================================
+// Progress Events (SSE)
+// ============================================
+
+export interface ProgressEvent {
+  type: 'progress';
+  phase: string;
+  status: string;
+  progress: number;
+  details?: Record<string, unknown>;
+}
+
+export interface ClarificationEvent {
+  type: 'clarification_needed';
+  questions: string[];
+  research_id: string;
+}
+
+export interface CompleteEvent {
+  type: 'complete';
+  research_id: string;
+  result: ResearchOutput;
+}
+
+export interface ErrorEvent {
+  type: 'error';
+  error_code: string;
+  message: string;
+}
+
+export type ResearchEvent = ProgressEvent | ClarificationEvent | CompleteEvent | ErrorEvent;
