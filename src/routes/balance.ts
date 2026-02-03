@@ -17,13 +17,20 @@ const router = Router();
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.query.user_id as string;
+    const shellId = req.query.shell_id as string | undefined;
+    const originUrl = req.query.origin_url as string | undefined;
 
     if (!userId) {
       throw new ValidationError('user_id is required');
     }
 
     const coreService = getCoreService();
-    const balanceData = await coreService.getBalance(userId, (req as any).id);
+    const balanceData = await coreService.getBalance(
+      userId,
+      (req as any).id,
+      shellId,
+      originUrl
+    );
 
     res.json({
       status: 'success',

@@ -131,15 +131,49 @@ export class CoreService {
   }
 
   /**
+   * GET /wallet/balance
    * Получает баланс пользователя
+   *
+   * @param shellId - Явный shell_id из URL (ПРИОРИТЕТ)
+   * @param originUrl - URL страницы для определения оболочки и получения ссылки пополнения (fallback)
    */
-  async getBalance(userId: string, requestId?: string): Promise<WalletBalanceResponse> {
-    return this.request<WalletBalanceResponse>(
+  async getBalance(
+    userId: string,
+    requestId?: string,
+    shellId?: string,
+    originUrl?: string
+  ): Promise<WalletBalanceResponse> {
+    logger.info('Getting balance', {
+      request_id: requestId,
+      user_id: userId,
+      shell_id: shellId || '(not provided)',
+      origin_url: originUrl || '(not provided)',
+    });
+
+    // Формируем URL с параметрами для определения оболочки и ссылки пополнения
+    let url = `/wallet/balance?user_id=${encodeURIComponent(userId)}`;
+    if (shellId) {
+      url += `&shell_id=${encodeURIComponent(shellId)}`;
+    }
+    if (originUrl) {
+      url += `&origin_url=${encodeURIComponent(originUrl)}`;
+    }
+
+    const response = await this.request<WalletBalanceResponse>(
       'GET',
-      `/wallet/balance?user_id=${encodeURIComponent(userId)}`,
+      url,
       undefined,
       requestId
     );
+
+    logger.info('Balance retrieved', {
+      request_id: requestId,
+      user_id: response.user_id,
+      balance: response.balance,
+      topup_url: response.topup_url ? '(present)' : '(null)',
+    });
+
+    return response;
   }
 
   /**
