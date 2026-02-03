@@ -1,10 +1,20 @@
 /**
  * @file public/js/api.js
- * @description API клиент
+ * @description API клиент для NeurA Research
+ * @context Используется app.js для запросов к backend
  */
 
+// Determine API base path from current location
+const API_BASE_URL = (function() {
+  const path = window.location.pathname;
+  if (path.includes('/m004')) {
+    return '/m004/api';
+  }
+  return '/api';
+})();
+
 const api = {
-  baseUrl: '',
+  baseUrl: API_BASE_URL,
 
   getUserId() {
     let userId = localStorage.getItem('neura-research-user-id');
