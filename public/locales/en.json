@@ -5,30 +5,37 @@
   },
   "header": {
     "balance": "Balance",
+    "balanceTitle": "Show balance",
     "history": "History",
     "newResearch": "New research"
   },
   "balance": {
-    "title": "Your balance",
+    "title": "Balance",
     "credits": "credits",
     "refresh": "Refresh",
     "topup": "Top up",
     "loading": "Loading...",
-    "error": "Failed to load balance"
+    "error": "Loading failed",
+    "updatedAt": "Updated"
   },
   "research": {
     "queryLabel": "Research topic",
-    "queryPlaceholder": "Enter a question or topic to research...",
+    "queryPlaceholder": "Describe your topic or question in detail: specify context, constraints, desired analysis depth. The more specific your query — the better the result.",
+    "queryHint": "Example: \"Compare the efficiency of solar and wind power plants in Northern Europe from 2020-2025.\"",
     "options": {
       "mode": "Mode",
+      "modeHelp": "Mode affects research depth and speed",
       "modeStandard": "Standard",
       "modeDeep": "Deep",
       "modeQuick": "Quick",
+      "modeHint": "Standard — optimal balance. Deep — maximum sources and verification. Quick — brief answer in a minute.",
       "type": "Type",
+      "typeHelp": "Type determines the format and structure of the report",
       "typeFactsAndAnalysis": "Facts & Analysis",
       "typeComparison": "Comparison",
       "typeTrends": "Trends",
       "typeHowTo": "How-to",
+      "typeHint": "Facts — overview with conclusions. Comparison — pros/cons table. Trends — dynamics and forecasts. How-to — step-by-step guide.",
       "language": "Language",
       "languageRu": "Russian",
       "languageEn": "English"
@@ -87,7 +94,8 @@
     "network": "Network error. Check your connection.",
     "insufficientBalance": "Insufficient balance",
     "validationError": "Validation error",
-    "serverError": "Server error"
+    "serverError": "Server error",
+    "topupUnavailable": "Top-up link unavailable. Contact support."
   },
   "common": {
     "loading": "Loading...",

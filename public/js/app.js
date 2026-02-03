@@ -1,17 +1,108 @@
 /**
  * @file public/js/app.js
- * @description Основной модуль приложения
+ * @description Основной модуль приложения NeurA Research
  */
+
+// Determine API base path from current location
+const API_BASE = (function() {
+  const path = window.location.pathname;
+  if (path.includes('/m004')) {
+    return '/m004/api';
+  }
+  return '/api';
+})();
 
 const app = {
   currentResearchId: null,
   eventSource: null,
   abortController: null,
+  version: 'loading...',
+  userId: null,
+  topupUrl: null,
 
   async init() {
     await i18n.init();
+    await this.loadModuleConfig();
+    this.initializeUser();
     this.bindEvents();
     this.initBalanceWidget();
+  },
+
+  /**
+   * Load module configuration from server (name, version)
+   */
+  async loadModuleConfig() {
+    try {
+      const healthPath = API_BASE.replace('/api', '/health');
+      const response = await fetch(healthPath);
+      const data = await response.json();
+
+      // Health returns { module: { version, name } }
+      const version = data.module?.version || data.version;
+      const name = data.module?.name || data.moduleName;
+
+      if (version) {
+        this.version = version;
+        const versionBadge = document.getElementById('version-badge');
+        if (versionBadge) {
+          versionBadge.textContent = `v${version}`;
+        }
+        console.log(`[M004] Version from server: ${version}`);
+      }
+
+      if (name) {
+        const moduleNameEl = document.getElementById('module-name');
+        if (moduleNameEl) {
+          moduleNameEl.textContent = name;
+        }
+      }
+    } catch (error) {
+      console.error('[M004] Failed to load module config:', error);
+      const versionBadge = document.getElementById('version-badge');
+      if (versionBadge) {
+        versionBadge.textContent = 'v?';
+      }
+    }
+  },
+
+  /**
+   * Initialize user from URL params
+   */
+  initializeUser() {
+    const params = new URLSearchParams(window.location.search);
+    const studentId = params.get('studentId');
+    const schoolNumber = params.get('schoolNumber');
+
+    if (studentId && schoolNumber) {
+      this.userId = `xl_${schoolNumber}_${studentId}`;
+      console.log('[M004] User initialized:', this.userId);
+    }
+  },
+
+  /**
+   * Get shell_id from URL parameter
+   */
+  getExplicitShellId() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('shell') || null;
+  },
+
+  /**
+   * Get origin_url for shell detection
+   */
+  getShellOriginUrl() {
+    const referrer = document.referrer;
+    if (referrer) {
+      try {
+        const referrerUrl = new URL(referrer);
+        if (referrerUrl.hostname.endsWith('.xl.ru') || referrerUrl.hostname === 'xl.ru') {
+          return referrer;
+        }
+      } catch (e) {
+        // Ignore
+      }
+    }
+    return window.location.href;
   },
 
   bindEvents() {
@@ -24,10 +115,10 @@ const app = {
       });
     }
 
-    // Balance widget
-    const balanceTrigger = document.getElementById('balance-trigger');
-    if (balanceTrigger) {
-      balanceTrigger.addEventListener('click', () => this.toggleBalancePopover());
+    // Balance widget (Standard)
+    const balanceToggle = document.getElementById('balance-toggle');
+    if (balanceToggle) {
+      balanceToggle.addEventListener('click', () => this.toggleBalancePopover());
     }
 
     const balanceClose = document.getElementById('balance-close');
@@ -35,23 +126,26 @@ const app = {
       balanceClose.addEventListener('click', () => this.closeBalancePopover());
     }
 
-    const refreshBalance = document.getElementById('refresh-balance');
-    if (refreshBalance) {
-      refreshBalance.addEventListener('click', () => this.fetchBalance());
+    const balanceRefresh = document.getElementById('balance-refresh');
+    if (balanceRefresh) {
+      balanceRefresh.addEventListener('click', () => this.fetchBalance());
     }
 
     // Close popover on outside click
     document.addEventListener('click', (e) => {
       const popover = document.getElementById('balance-popover');
-      const trigger = document.getElementById('balance-trigger');
-      if (popover && !popover.contains(e.target) && !trigger.contains(e.target)) {
+      const toggle = document.getElementById('balance-toggle');
+      if (popover && !popover.hidden && !popover.contains(e.target) && !toggle.contains(e.target)) {
         this.closeBalancePopover();
       }
     });
 
-    // Language selector
+    // Language selector - переключение языка интерфейса
     const langSelect = document.getElementById('language-select');
     if (langSelect) {
+      // Set current locale in selector
+      langSelect.value = i18n.locale;
+
       langSelect.addEventListener('change', (e) => {
         i18n.setLocale(e.target.value);
       });
@@ -59,14 +153,15 @@ const app = {
   },
 
   initBalanceWidget() {
-    this.fetchBalance();
+    // Initial fetch not needed - will fetch on popover open
   },
 
   toggleBalancePopover() {
     const popover = document.getElementById('balance-popover');
     if (popover) {
-      popover.classList.toggle('open');
-      if (popover.classList.contains('open')) {
+      const isHidden = popover.hidden;
+      popover.hidden = !isHidden;
+      if (!popover.hidden) {
         this.fetchBalance();
       }
     }
@@ -75,33 +170,74 @@ const app = {
   closeBalancePopover() {
     const popover = document.getElementById('balance-popover');
     if (popover) {
-      popover.classList.remove('open');
+      popover.hidden = true;
     }
   },
 
   async fetchBalance() {
-    const amountEl = document.getElementById('balance-amount');
-    const topupBtn = document.getElementById('topup-btn');
+    const valueEl = document.getElementById('balance-value');
+    const updatedEl = document.getElementById('balance-updated');
+    const topupBtn = document.getElementById('balance-topup');
 
-    if (amountEl) {
-      amountEl.textContent = i18n.t('balance.loading');
+    if (valueEl) {
+      valueEl.textContent = '...';
     }
 
     try {
-      const result = await api.getBalance();
-      if (amountEl && result.data) {
-        amountEl.textContent = `${result.data.balance} ${i18n.t('balance.credits')}`;
+      const shellId = this.getExplicitShellId();
+      const originUrl = this.getShellOriginUrl();
+
+      let url = `${API_BASE}/balance?origin_url=${encodeURIComponent(originUrl)}`;
+      if (this.userId) {
+        url += `&user_id=${encodeURIComponent(this.userId)}`;
       }
-      if (topupBtn && result.data?.topup_url) {
-        topupBtn.href = result.data.topup_url;
-        topupBtn.classList.remove('hidden');
+      if (shellId) {
+        url += `&shell_id=${encodeURIComponent(shellId)}`;
+      }
+
+      const response = await fetch(url);
+      const result = await response.json();
+
+      if (result.status === 'success' && result.data) {
+        const balance = result.data.balance;
+        this.topupUrl = result.data.topup_url || null;
+
+        if (valueEl) {
+          valueEl.textContent = balance.toFixed(2);
+        }
+        if (updatedEl) {
+          updatedEl.textContent = `${i18n.t('balance.updatedAt')}: ${new Date().toLocaleTimeString(i18n.locale === 'ru' ? 'ru-RU' : 'en-US')}`;
+        }
+        this.updateTopupLink();
+      } else {
+        throw new Error(result.message || 'Balance fetch failed');
       }
     } catch (error) {
-      console.error('Failed to fetch balance:', error);
-      if (amountEl) {
-        amountEl.textContent = i18n.t('balance.error');
+      console.error('[M004] Failed to fetch balance:', error);
+      if (valueEl) {
+        valueEl.textContent = '--';
       }
-      this.showToast(error.message, 'error');
+      if (updatedEl) {
+        updatedEl.textContent = i18n.t('balance.error');
+      }
+    }
+  },
+
+  updateTopupLink() {
+    const topupBtn = document.getElementById('balance-topup');
+    if (topupBtn) {
+      if (this.topupUrl) {
+        topupBtn.href = this.topupUrl;
+        topupBtn.target = '_blank';
+        topupBtn.onclick = null;
+      } else {
+        topupBtn.href = '#';
+        topupBtn.removeAttribute('target');
+        topupBtn.onclick = (e) => {
+          e.preventDefault();
+          this.showToast(i18n.t('errors.topupUnavailable') || 'Ссылка для пополнения недоступна', 'error');
+        };
+      }
     }
   },
 

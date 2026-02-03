@@ -25,7 +25,7 @@ NeurA Research — модуль глубоких исследований, ко�
 
 - **Runtime:** Node.js 20+
 - **Backend:** Express 4.x, TypeScript 5.x
-- **AI Models:** 
+- **AI Models:**
   - Perplexity sonar-pro (research + verification)
   - Claude claude-sonnet-4-20250514 (planning, synthesis)
 - **Storage:** SQLite (bind mount вне контейнера)
@@ -57,6 +57,7 @@ docker-compose up -d --build
 ### Автоматический (GitHub Actions)
 
 При push в `main` запускается workflow `.github/workflows/deploy.yml`:
+
 1. SSH подключение к серверу
 2. `git pull`
 3. `docker compose down`
