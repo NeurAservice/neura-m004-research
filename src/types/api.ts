@@ -15,6 +15,8 @@ export interface CreateResearchRequest {
   user_id: string;
   options?: Partial<ResearchOptions>;
   session_id?: string;
+  shell_id?: string;
+  origin_url?: string;
 }
 
 export interface ClarifyRequest {

@@ -40,6 +40,10 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     const query = body.query.trim();
     const options: ResearchOptions = { ...DEFAULT_OPTIONS, ...body.options };
 
+    // Сохраняем shell info для биллинга
+    const shellId = body.shell_id;
+    const originUrl = body.origin_url || req.headers.referer || req.headers.origin as string;
+
     // Начинаем биллинг
     const coreService = getCoreService();
     const billingResult = await coreService.startBilling({
@@ -101,7 +105,8 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
           action: 'commit',
           userId,
           usage: orchestrator.getBillingUsage(),
-          originUrl: req.headers.referer || req.headers.origin as string,
+          shellId,
+          originUrl,
           requestId,
         });
       } else if (result.status === 'failed') {
