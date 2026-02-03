@@ -23,7 +23,7 @@ const app = {
   async init() {
     await i18n.init();
     await this.loadModuleConfig();
-    this.initializeUser();
+    await this.initializeUser();
     this.bindEvents();
     this.initBalanceWidget();
   },
@@ -66,16 +66,54 @@ const app = {
   },
 
   /**
-   * Initialize user from URL params
+   * Initialize user from URL params with identity resolution
    */
-  initializeUser() {
+  async initializeUser() {
     const params = new URLSearchParams(window.location.search);
     const studentId = params.get('studentId');
     const schoolNumber = params.get('schoolNumber');
 
     if (studentId && schoolNumber) {
-      this.userId = `xl_${schoolNumber}_${studentId}`;
-      console.log('[M004] User initialized:', this.userId);
+      // Shell integration mode - resolve identity through CORE
+      await this.resolveIdentity(studentId, schoolNumber);
+    } else {
+      // Direct access mode - use stored or generate user ID
+      this.userId = localStorage.getItem('m004_user_id');
+      if (!this.userId) {
+        this.userId = 'usr_dev_' + crypto.randomUUID().substring(0, 8);
+        localStorage.setItem('m004_user_id', this.userId);
+      }
+      console.log('[M004] Using local user ID:', this.userId);
+    }
+  },
+
+  /**
+   * Resolve identity through CORE API
+   */
+  async resolveIdentity(studentId, schoolNumber) {
+    try {
+      const response = await fetch(`${API_BASE}/identity/init`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'prodamus_xl',
+          tenant: `xl:${schoolNumber}`,
+          external_user_id: studentId
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        this.userId = data.user_id;
+        localStorage.setItem('m004_user_id', this.userId);
+        console.log('[M004] Identity resolved:', this.userId);
+      } else {
+        console.error('[M004] Identity resolution failed:', data.error);
+        this.showToast(i18n.t('errors.identityFailed'), 'error');
+      }
+    } catch (error) {
+      console.error('[M004] Identity resolution error:', error);
     }
   },
 

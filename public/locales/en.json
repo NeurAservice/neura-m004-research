@@ -95,7 +95,8 @@
     "insufficientBalance": "Insufficient balance",
     "validationError": "Validation error",
     "serverError": "Server error",
-    "topupUnavailable": "Top-up link unavailable. Contact support."
+    "topupUnavailable": "Top-up link unavailable. Contact support.",
+    "identityFailed": "Identity error. Please reload the page."
   },
   "common": {
     "loading": "Loading...",

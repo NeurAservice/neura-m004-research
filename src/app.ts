@@ -7,7 +7,7 @@
 import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
 import path from 'path';
-import { healthRouter, balanceRouter, researchRouter, internalRouter } from './routes';
+import { healthRouter, balanceRouter, identityRouter, researchRouter, internalRouter } from './routes';
 import { errorHandler, requestLogger } from './middleware';
 import config from './config';
 
@@ -39,6 +39,7 @@ export function createApp(): Express {
   app.use('/health', healthRouter);
   app.use('/api/health', healthRouter);
   app.use('/api/balance', balanceRouter);
+  app.use('/api/identity', identityRouter);
   app.use('/api/research', researchRouter);
   app.use('/api/internal', internalRouter);
 

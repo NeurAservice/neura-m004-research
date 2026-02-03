@@ -141,6 +141,44 @@ export class CoreService {
       requestId
     );
   }
+
+  /**
+   * POST /identity/resolve
+   * Преобразует внешний ID из оболочки во внутренний user_id
+   */
+  async resolveIdentity(
+    provider: string,
+    tenant: string,
+    externalUserId: string,
+    requestId: string
+  ): Promise<{ user_id: string; is_new: boolean }> {
+    logger.info('Resolving identity', {
+      request_id: requestId,
+      provider,
+      tenant,
+      external_user_id: externalUserId,
+    });
+
+    const response = await this.request<{ user_id: string; is_new: boolean }>(
+      'POST',
+      '/identity/resolve',
+      {
+        request_id: requestId,
+        provider,
+        tenant,
+        external_user_id: externalUserId,
+      },
+      requestId
+    );
+
+    logger.info('Identity resolved', {
+      request_id: requestId,
+      user_id: response.user_id,
+      is_new: response.is_new,
+    });
+
+    return response;
+  }
 }
 
 // Синглтон
