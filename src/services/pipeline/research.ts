@@ -7,6 +7,8 @@
 import { getPerplexityService } from '../perplexity';
 import { logger } from '../../utils/logger';
 import { containsCurrentIndicators } from '../../utils/helpers';
+import { getResearchPrompt } from '../../config/prompts';
+import { getResearchDenylist } from '../../config/domains';
 import {
   ResearchQuestion,
   ResearchQuestionResult,
@@ -30,14 +32,11 @@ export async function executeResearch(
     questions.map(q => q.text).join(' ')
   );
 
-  // Системный промпт для исследования
-  const systemPrompt = options.language === 'ru'
-    ? `Ты — исследовательский ассистент. Предоставляй точную, хорошо подкреплённую источниками информацию.
-Всегда указывай источники своих утверждений. Если информация неопределённа, скажи об этом.
-Отвечай на русском языке.`
-    : `You are a research assistant. Provide accurate, well-sourced information.
-Always cite your sources. If information is uncertain, say so.
-Respond in English.`;
+  // Используем anti-hallucination промпт из конфига
+  const systemPrompt = getResearchPrompt(options.language);
+
+  // Получаем denylist для исключения низкокачественных источников
+  const domainDenylist = getResearchDenylist();
 
   // Выполняем запросы параллельно (с ограничением concurrency)
   const concurrency = 3;
@@ -63,6 +62,8 @@ Respond in English.`;
             systemPrompt,
             recencyFilter,
             requestId,
+            domainFilter: domainDenylist,  // Исключаем Reddit, Quora и т.д.
+            contextSize: 'high',            // Максимум контекста для исследований
           });
 
           completedCount++;
@@ -87,7 +88,7 @@ Respond in English.`;
             questionId: question.id,
             response: '',
             citations: [],
-            tokensUsed: { input: 0, output: 0 },
+            tokensUsed: { input: 0, output: 0, searchContextTokens: 0, totalCost: 0 },
           };
         }
       })
@@ -101,6 +102,8 @@ Respond in English.`;
     questions_total: questions.length,
     successful: results.filter(r => r.response).length,
     total_citations: results.reduce((sum, r) => sum + r.citations.length, 0),
+    domain_filter_applied: domainDenylist.length,
+    context_size: 'high',
   });
 
   return results;

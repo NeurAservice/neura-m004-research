@@ -10,6 +10,8 @@ import { logger, logAiCall } from '../utils/logger';
 import { retry, extractJsonFromText, safeJsonParse } from '../utils/helpers';
 import { Citation } from '../types/research';
 import { getAuthorityScore, getAuthorityLabel } from '../config/authority';
+import { getVerificationPrompt } from '../config/prompts';
+import { getVerificationAllowlist } from '../config/domains';
 
 interface PerplexityMessage {
   role: 'system' | 'user' | 'assistant';
@@ -22,7 +24,13 @@ interface PerplexityRequest {
   temperature?: number;
   max_tokens?: number;
   return_citations?: boolean;
-  search_recency_filter?: 'month' | 'week' | 'day' | 'hour';
+  search_recency_filter?: 'month' | 'week' | 'day' | 'hour' | 'year';
+  // Новые параметры для улучшения качества
+  search_domain_filter?: string[];
+  search_mode?: 'default' | 'academic';
+  web_search_options?: {
+    search_context_size: 'low' | 'medium' | 'high';
+  };
 }
 
 interface PerplexityCitation {
@@ -30,6 +38,21 @@ interface PerplexityCitation {
   title?: string;
   snippet?: string;
   published_date?: string;
+}
+
+interface PerplexityCost {
+  input_tokens_cost?: number;
+  output_tokens_cost?: number;
+  request_cost?: number;
+  total_cost?: number;
+}
+
+interface PerplexityUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  search_context_size?: 'low' | 'medium' | 'high';
+  cost?: PerplexityCost;
 }
 
 interface PerplexityResponse {
@@ -43,11 +66,7 @@ interface PerplexityResponse {
     finish_reason: string;
   }>;
   citations?: PerplexityCitation[];
-  usage: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-  };
+  usage: PerplexityUsage;
 }
 
 export class PerplexityService {
@@ -62,6 +81,16 @@ export class PerplexityService {
 
   /**
    * Выполняет поисковый запрос
+   * @param query - Текст запроса
+   * @param options - Опции запроса
+   * @param options.systemPrompt - System prompt для модели
+   * @param options.temperature - Температура генерации (default: 0.1)
+   * @param options.maxTokens - Максимальное количество токенов (default: 4000)
+   * @param options.recencyFilter - Фильтр по свежести данных
+   * @param options.requestId - ID запроса для логирования
+   * @param options.domainFilter - Фильтр доменов (denylist с '-', allowlist без)
+   * @param options.searchMode - Режим поиска ('default' | 'academic')
+   * @param options.contextSize - Размер контекста поиска ('low' | 'medium' | 'high')
    */
   async search(
     query: string,
@@ -69,24 +98,39 @@ export class PerplexityService {
       systemPrompt?: string;
       temperature?: number;
       maxTokens?: number;
-      recencyFilter?: 'month' | 'week' | 'day' | 'hour';
+      recencyFilter?: 'month' | 'week' | 'day' | 'hour' | 'year';
       requestId?: string;
+      domainFilter?: string[];
+      searchMode?: 'default' | 'academic';
+      contextSize?: 'low' | 'medium' | 'high';
     } = {}
   ): Promise<{
     content: string;
     citations: Citation[];
-    usage: { input: number; output: number };
+    usage: {
+      input: number;
+      output: number;
+      searchContextTokens: number;
+      totalCost: number;
+    };
   }> {
     const {
-      systemPrompt = 'You are a helpful research assistant. Provide accurate, well-sourced information.',
+      systemPrompt,
       temperature = 0.1,
       maxTokens = 4000,
       recencyFilter,
       requestId,
+      domainFilter,
+      searchMode,
+      contextSize = 'high',
     } = options;
 
+    // Используем дефолтный промпт если не передан
+    const effectiveSystemPrompt = systemPrompt ||
+      'You are a helpful research assistant. Provide accurate, well-sourced information.';
+
     const messages: PerplexityMessage[] = [
-      { role: 'system', content: systemPrompt },
+      { role: 'system', content: effectiveSystemPrompt },
       { role: 'user', content: query },
     ];
 
@@ -98,9 +142,25 @@ export class PerplexityService {
       return_citations: true,
     };
 
+    // Применяем фильтр по свежести если указан
     if (recencyFilter) {
       requestBody.search_recency_filter = recencyFilter;
     }
+
+    // Применяем фильтр доменов если указан
+    if (domainFilter && domainFilter.length > 0) {
+      requestBody.search_domain_filter = domainFilter;
+    }
+
+    // Применяем режим поиска если указан
+    if (searchMode) {
+      requestBody.search_mode = searchMode;
+    }
+
+    // Устанавливаем размер контекста поиска (по умолчанию 'high' для исследований)
+    requestBody.web_search_options = {
+      search_context_size: contextSize,
+    };
 
     const startTime = Date.now();
 
@@ -154,12 +214,30 @@ export class PerplexityService {
         };
       });
 
+      // Оценка search context tokens на основе search_context_size
+      // Low: ~2500 tokens, Medium: ~5000 tokens, High: ~10000 tokens per request
+      const searchContextSizeMap: Record<string, number> = {
+        low: 2500,
+        medium: 5000,
+        high: 10000,
+      };
+      const searchContextSize = response.usage.search_context_size || 'low';
+      const estimatedSearchContextTokens = searchContextSizeMap[searchContextSize] || 2500;
+      const totalCost = response.usage.cost?.total_cost || 0;
+
       logAiCall(requestId || 'unknown', 'perplexity', this.model, 'search', {
         query_length: query.length,
         response_length: content.length,
         citations_count: citations.length,
         duration_ms: duration,
         tokens: response.usage,
+        search_context_size: searchContextSize,
+        estimated_search_context_tokens: estimatedSearchContextTokens,
+        total_cost: totalCost,
+        // Новые поля для отладки
+        domain_filter: domainFilter ? domainFilter.length : 'none',
+        search_mode: searchMode || 'default',
+        context_size_requested: contextSize,
       });
 
       return {
@@ -168,6 +246,8 @@ export class PerplexityService {
         usage: {
           input: response.usage.prompt_tokens,
           output: response.usage.completion_tokens,
+          searchContextTokens: estimatedSearchContextTokens,
+          totalCost,
         },
       };
     } catch (error) {
@@ -181,7 +261,10 @@ export class PerplexityService {
   }
 
   /**
-   * Верифицирует факт
+   * Верифицирует факт с использованием авторитетных источников
+   * @param claim - Утверждение для проверки
+   * @param options.context - Дополнительный контекст
+   * @param options.requestId - ID запроса для логирования
    */
   async verifyFact(
     claim: string,
@@ -195,25 +278,15 @@ export class PerplexityService {
     correction?: string;
     explanation: string;
     sources: Citation[];
-    usage: { input: number; output: number };
+    usage: { input: number; output: number; searchContextTokens: number; totalCost: number };
   }> {
     const { context, requestId } = options;
 
-    const systemPrompt = `You are a fact-checking assistant. Your task is to verify claims by searching for reliable sources.
+    // Используем специализированный промпт для верификации
+    const systemPrompt = getVerificationPrompt();
 
-For each claim, you must:
-1. Search for authoritative sources
-2. Determine if the claim is accurate
-3. Provide a confidence score (0.0 to 1.0)
-4. If incorrect or partially correct, provide the correct information
-
-IMPORTANT: Respond ONLY with a JSON object in this exact format:
-{
-  "status": "verified" | "partially_correct" | "incorrect" | "unverifiable",
-  "confidence": 0.0-1.0,
-  "correction": "corrected information if needed",
-  "explanation": "brief explanation of your verification"
-}`;
+    // Allowlist авторитетных источников
+    const verificationDomains = getVerificationAllowlist();
 
     let query = `Verify this claim: "${claim}"`;
     if (context) {
@@ -224,6 +297,9 @@ IMPORTANT: Respond ONLY with a JSON object in this exact format:
       systemPrompt,
       temperature: 0.1,
       requestId,
+      domainFilter: verificationDomains,  // Только авторитетные источники
+      searchMode: 'academic',              // Приоритет академических источников
+      contextSize: 'medium',               // Средний контекст для верификации
     });
 
     // Парсим JSON ответ

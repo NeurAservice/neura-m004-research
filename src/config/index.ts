@@ -70,3 +70,7 @@ export const config = {
 };
 
 export default config;
+
+// Re-export domain and prompt configurations
+export * from './domains';
+export * from './prompts';
