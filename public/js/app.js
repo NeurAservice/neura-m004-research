@@ -531,12 +531,12 @@ const app = {
           <span class="source-index">[${i + 1}]</span>
           <div class="source-content">
             <div class="source-title">
-              <a href="${source.url}" target="_blank" rel="noopener">${source.title || source.url}</a>
-              <span class="source-authority ${this.getAuthorityClass(source.authorityScore)}">
-                ${Math.round((source.authorityScore || 0) * 100)}%
+              <a href="${source.url || '#'}" target="_blank" rel="noopener">${source.title || source.url || 'Unknown source'}</a>
+              <span class="source-authority ${this.getAuthorityClass(source.authorityScore || source.authority)}">
+                ${Math.round(((source.authorityScore || source.authority || 0)) * 100)}%
               </span>
             </div>
-            <div class="source-domain">${source.domain || new URL(source.url).hostname}</div>
+            <div class="source-domain">${source.domain || (() => { try { return new URL(source.url).hostname; } catch { return source.url || 'unknown'; } })()}</div>
           </div>
         </div>
       `).join('');

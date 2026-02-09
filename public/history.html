@@ -13,7 +13,7 @@
   <div class="app-container">
     <!-- Header -->
     <header class="header">
-      <a href="/" class="header-logo">
+      <a href="./" class="header-logo">
         <svg viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
         </svg>
@@ -21,7 +21,7 @@
       </a>
 
       <div class="header-actions">
-        <a href="/" class="btn btn-primary btn-sm" data-i18n="header.newResearch">Новое исследование</a>
+        <a href="./" class="btn btn-primary btn-sm" data-i18n="header.newResearch">Новое исследование</a>
 
         <!-- Balance Widget (Standard) - унифицирован с index.html -->
         <div class="balance-popover-wrapper">
@@ -61,7 +61,7 @@
             <p class="text-center text-muted" data-i18n="common.loading">Загрузка...</p>
           </div>
 
-          <button id="load-more" class="btn btn-secondary mt-2 hidden" onclick="history.loadMore()" data-i18n="history.loadMore">
+          <button id="load-more" class="btn btn-secondary mt-2 hidden" onclick="historyApp.loadMore()" data-i18n="history.loadMore">
             Загрузить ещё
           </button>
         </div>
@@ -72,8 +72,8 @@
   <!-- Toast Container -->
   <div id="toast-container" class="toast-container"></div>
 
-  <script src="/js/i18n.js"></script>
-  <script src="/js/api.js"></script>
+  <script src="js/i18n.js"></script>
+  <script src="js/api.js"></script>
   <script>
     const historyPage = {
       items: [],
@@ -194,7 +194,7 @@
         }
 
         listEl.innerHTML = this.items.map(item => `
-          <a href="/?research=${item.id}" class="history-item">
+          <a href="./?research=${item.id}" class="history-item">
             <div class="history-item-content">
               <div class="history-item-query">${this.escapeHtml(item.query)}</div>
               <div class="history-item-meta">
@@ -229,7 +229,7 @@
       historyPage.init();
     });
 
-    window.history = historyPage;
+    window.historyApp = historyPage;
   </script>
 </body>
 </html>
