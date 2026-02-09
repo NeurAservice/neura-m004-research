@@ -35,8 +35,11 @@ export async function triage(
 ): Promise<TriageWithUsage> {
   const openai = getOpenAIService();
 
-  // Если пользователь явно указал режим, используем его
-  const userMode = options.mode !== 'auto' ? options.mode : undefined;
+  // Если пользователь явно указал режим, используем его (с валидацией)
+  const validModes: ResearchMode[] = ['simple', 'standard', 'deep'];
+  const userMode = options.mode !== 'auto' && validModes.includes(options.mode as ResearchMode)
+    ? (options.mode as ResearchMode)
+    : undefined;
 
   const prompt = `Analyze this research query and classify it.
 

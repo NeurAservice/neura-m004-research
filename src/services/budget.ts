@@ -124,7 +124,16 @@ export class TokenBudgetManager {
     circuitBreaker: CircuitBreakerConfig,
     requestId?: string
   ) {
-    this.mode = mode;
+    // Защита от невалидного mode — fallback к standard
+    const validModes: ResearchModeForBudget[] = ['simple', 'standard', 'deep'];
+    this.mode = validModes.includes(mode) ? mode : 'standard';
+    if (this.mode !== mode) {
+      logger.warn('Invalid budget mode, falling back to standard', {
+        request_id: requestId,
+        requested_mode: mode,
+        actual_mode: this.mode,
+      });
+    }
     this.limits = { ...limits };
     this.circuitBreakerConfig = { ...circuitBreaker };
     this.requestId = requestId;

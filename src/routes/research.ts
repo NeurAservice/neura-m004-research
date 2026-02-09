@@ -20,6 +20,56 @@ const router = Router();
 const activeOrchestrators = new Map<string, ResearchOrchestrator>();
 
 /**
+ * Маппинг UI mode → backend ResearchMode
+ * quick (UI "Быстрый") → simple (backend)
+ */
+const MODE_MAP: Record<string, ResearchOptions['mode']> = {
+  simple: 'simple',
+  standard: 'standard',
+  deep: 'deep',
+  quick: 'simple',
+  auto: 'auto',
+};
+
+/**
+ * Маппинг UI researchType → backend ResearchType
+ * comparison, trends, how_to — UI-варианты → facts_and_analysis
+ */
+const RESEARCH_TYPE_MAP: Record<string, ResearchOptions['researchType']> = {
+  facts_only: 'facts_only',
+  facts_and_analysis: 'facts_and_analysis',
+  full: 'full',
+  comparison: 'facts_and_analysis',
+  trends: 'facts_and_analysis',
+  how_to: 'facts_and_analysis',
+};
+
+/**
+ * Нормализует опции из фронтенда к допустимым бэкенд-значениям
+ */
+function normalizeResearchOptions(raw: Record<string, unknown>): Partial<ResearchOptions> {
+  const result: Partial<ResearchOptions> = {};
+
+  if (raw.mode) {
+    result.mode = MODE_MAP[raw.mode as string] || 'auto';
+  }
+  if (raw.researchType) {
+    result.researchType = RESEARCH_TYPE_MAP[raw.researchType as string] || 'facts_and_analysis';
+  }
+  if (raw.language === 'ru' || raw.language === 'en') {
+    result.language = raw.language;
+  }
+  if (typeof raw.maxReportLength === 'string') {
+    const validLengths = ['short', 'medium', 'long'] as const;
+    if (validLengths.includes(raw.maxReportLength as any)) {
+      result.maxReportLength = raw.maxReportLength as ResearchOptions['maxReportLength'];
+    }
+  }
+
+  return result;
+}
+
+/**
  * POST /api/research
  * Создаёт новое исследование
  */
@@ -38,7 +88,11 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
 
     const userId = body.user_id;
     const query = body.query.trim();
-    const options: ResearchOptions = { ...DEFAULT_OPTIONS, ...body.options };
+
+    // Нормализуем options с валидацией значений
+    const rawOptions = body.options || {};
+    const normalizedOptions = normalizeResearchOptions(rawOptions);
+    const options: ResearchOptions = { ...DEFAULT_OPTIONS, ...normalizedOptions };
 
     // Сохраняем shell info для биллинга
     const shellId = body.shell_id;
