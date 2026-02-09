@@ -163,19 +163,17 @@
               <div style="display: flex; align-items: center; gap: 1rem;">
                 <span id="quality-badge" class="quality-badge"></span>
                 <div class="btn-group">
-                  <button id="export-md" class="btn btn-secondary btn-sm" data-i18n="result.exportMarkdown">Скачать Markdown</button>
-                  <button id="export-json" class="btn btn-secondary btn-sm" data-i18n="result.exportJson">Скачать JSON</button>
+                  <a id="export-md" href="#" class="btn btn-secondary btn-sm" download data-i18n="result.exportMarkdown">Markdown</a>
+                  <a id="export-json" href="#" class="btn btn-secondary btn-sm" download data-i18n="result.exportJson">JSON</a>
                 </div>
               </div>
             </div>
           </div>
           <div class="card-body">
-            <p id="quality-explanation" class="quality-explanation hidden"></p>
             <div id="report-content" class="report-content"></div>
 
             <div class="sources-section">
-              <h3 data-i18n="result.sources">Использованные источники</h3>
-              <p id="sources-hint" class="sources-hint hidden"></p>
+              <h3 data-i18n="result.sources">Источники</h3>
               <div id="sources-list" class="sources-list"></div>
             </div>
           </div>

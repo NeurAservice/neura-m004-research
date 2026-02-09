@@ -712,12 +712,11 @@ textarea.form-control {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius);
-  cursor: pointer;
   transition: var(--transition);
 }
 
 .history-item:hover {
-  border-color: var(--primary-color);
+  background: var(--bg-hover);
 }
 
 .history-item-content {
@@ -762,58 +761,58 @@ textarea.form-control {
   color: var(--danger-color);
 }
 
-/* History item action buttons */
 .history-item-actions {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 0.5rem;
-  padding-top: 0.5rem;
+  flex-shrink: 0;
 }
 
-.history-item-buttons {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.history-item-buttons .btn {
+.history-item-actions .btn-sm {
+  padding: 0.25rem 0.5rem;
   font-size: 0.75rem;
-  padding: 0.25rem 0.75rem;
 }
 
-.history-quality {
-  font-size: 0.75rem;
-  color: var(--text-muted);
+.history-item-actions .btn-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition);
 }
 
-.history-quality .quality-badge {
+.history-item-actions .btn-icon:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.history-item-actions .btn-icon svg {
+  flex-shrink: 0;
+}
+
+.quality-chip {
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
   font-size: 0.7rem;
-  padding: 0.15rem 0.4rem;
+  font-weight: 600;
 }
 
-/* Quality explanation */
-.quality-explanation {
-  font-size: 0.875rem;
-  color: var(--text-muted);
-  padding: 0.75rem 1rem;
-  margin-bottom: 1rem;
-  background: rgba(var(--primary-rgb, 99, 102, 241), 0.08);
-  border-left: 3px solid var(--primary-color);
-  border-radius: 0 var(--border-radius) var(--border-radius) 0;
-  line-height: 1.5;
+.quality-chip.high {
+  background: rgba(40, 167, 69, 0.2);
+  color: var(--success-color);
 }
 
-/* Sources hint */
-.sources-hint {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  margin-bottom: 0.75rem;
-  font-style: italic;
+.quality-chip.medium {
+  background: rgba(255, 193, 7, 0.2);
+  color: #ffc107;
 }
 
-/* Quality badge cursor hint */
-.quality-badge {
-  cursor: help;
+.quality-chip.low {
+  background: rgba(220, 53, 69, 0.2);
+  color: var(--danger-color);
 }
 
 /* Toast Notifications */

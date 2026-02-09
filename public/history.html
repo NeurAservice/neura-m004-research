@@ -193,47 +193,73 @@
           return;
         }
 
-        listEl.innerHTML = this.items.map(item => {
-          const isCompleted = item.status === 'completed';
-          const qualityPct = item.quality_score ? Math.round(item.quality_score * 100) : null;
-          const qualityClass = qualityPct >= 80 ? 'high' : qualityPct >= 60 ? 'medium' : 'low';
-          const qualityLabel = qualityPct >= 80
-            ? i18n.t('result.qualityHigh')
-            : qualityPct >= 60
-              ? i18n.t('result.qualityMedium')
-              : i18n.t('result.qualityLow');
-
-          return `
-            <div class="history-item">
-              <div class="history-item-content">
-                <div class="history-item-query">${this.escapeHtml(item.query)}</div>
-                <div class="history-item-meta">
-                  <span>${this.formatDate(item.created_at)}</span>
-                  ${qualityPct !== null ? `<span class="history-quality ${qualityClass}">${i18n.t('history.qualityLabel')}: ${qualityPct}% — ${qualityLabel}</span>` : ''}
-                </div>
-              </div>
-              <div class="history-item-actions">
-                <span class="history-item-status ${item.status}">${i18n.t('status.' + item.status)}</span>
-                ${isCompleted ? `
-                  <div class="history-item-buttons">
-                    <button class="btn btn-secondary btn-sm" onclick="historyPage.viewResearch('${item.id}')" title="${i18n.t('history.viewResult')}">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                      ${i18n.t('history.viewResult')}
-                    </button>
-                    <button class="btn btn-secondary btn-sm" onclick="historyPage.downloadExport('${item.id}', 'markdown')" title="${i18n.t('history.downloadMd')}">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                      .md
-                    </button>
-                    <button class="btn btn-secondary btn-sm" onclick="historyPage.downloadExport('${item.id}', 'json')" title="${i18n.t('history.downloadJson')}">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                      .json
-                    </button>
-                  </div>
-                ` : ''}
+        listEl.innerHTML = this.items.map(item => `
+          <div class="history-item">
+            <div class="history-item-content">
+              <div class="history-item-query">${this.escapeHtml(item.query)}</div>
+              <div class="history-item-meta">
+                <span>${this.formatDate(item.created_at)}</span>
+                ${item.quality_score ? `<span class="quality-chip ${this.getQualityClass(item.quality_score)}">${Math.round(item.quality_score * 100)}%</span>` : ''}
               </div>
             </div>
-          `;
-        }).join('');
+            <div class="history-item-actions">
+              <span class="history-item-status ${item.status}">${i18n.t('status.' + item.status)}</span>
+              ${item.status === 'completed' ? `
+                <button class="btn btn-sm btn-icon" onclick="historyPage.downloadFile('${item.id}', 'markdown')" title="${i18n.t('result.exportMarkdown')}">
+                  <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 2l5 5h-5V4zM6 20V4h5v6h6v10H6z"/></svg>
+                  MD
+                </button>
+                <button class="btn btn-sm btn-icon" onclick="historyPage.downloadFile('${item.id}', 'json')" title="${i18n.t('result.exportJson')}">
+                  <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 2l5 5h-5V4zM6 20V4h5v6h6v10H6z"/></svg>
+                  JSON
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        `).join('');
+      },
+
+      getQualityClass(score) {
+        if (score >= 0.8) return 'high';
+        if (score >= 0.6) return 'medium';
+        return 'low';
+      },
+
+      async downloadFile(researchId, format) {
+        try {
+          const response = await fetch(api.getExportUrl(researchId, format));
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Download failed');
+          }
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `research-${researchId}.${format === 'markdown' ? 'md' : 'json'}`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+        } catch (error) {
+          console.error('Download failed:', error);
+          this.showToast(error.message || i18n.t('errors.network'), 'error');
+        }
+      },
+
+      showToast(message, type = 'info') {
+        let container = document.getElementById('toast-container');
+        if (!container) {
+          container = document.createElement('div');
+          container.id = 'toast-container';
+          container.className = 'toast-container';
+          document.body.appendChild(container);
+        }
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        container.appendChild(toast);
+        setTimeout(() => toast.remove(), 5000);
       },
 
       formatDate(dateStr) {
@@ -251,54 +277,6 @@
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
-      },
-
-      /**
-       * Скачивает экспорт исследования (MD или JSON) через fetch + blob
-       */
-      async downloadExport(researchId, format) {
-        try {
-          const url = api.getExportUrl(researchId, format);
-          const response = await fetch(url);
-
-          if (!response.ok) {
-            const error = await response.json().catch(() => ({ message: 'Ошибка загрузки' }));
-            throw new Error(error.message || 'Не удалось скачать файл');
-          }
-
-          const blob = await response.blob();
-          const ext = format === 'markdown' ? 'md' : 'json';
-          const filename = `research-${researchId.substring(0, 8)}.${ext}`;
-
-          const a = document.createElement('a');
-          a.href = URL.createObjectURL(blob);
-          a.download = filename;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(a.href);
-        } catch (error) {
-          console.error('[History] Download failed:', error);
-          this.showToast(error.message || 'Ошибка скачивания', 'error');
-        }
-      },
-
-      /**
-       * Открывает результат исследования на главной странице
-       */
-      viewResearch(researchId) {
-        window.location.href = `./?research=${researchId}`;
-      },
-
-      showToast(message, type = 'info') {
-        const container = document.getElementById('toast-container');
-        if (!container) return;
-
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        toast.textContent = message;
-        container.appendChild(toast);
-        setTimeout(() => toast.remove(), 5000);
       }
     };
 
