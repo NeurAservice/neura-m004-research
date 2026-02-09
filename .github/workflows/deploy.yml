@@ -5,40 +5,121 @@ on:
         branches: [main]
     workflow_dispatch:
 
+env:
+    SSH_OPTS: "-o StrictHostKeyChecking=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=5 -o ConnectTimeout=15"
+
 jobs:
     deploy:
         runs-on: ubuntu-latest
+        timeout-minutes: 15
 
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
 
             - name: Set up SSH
-              uses: webfactory/ssh-agent@v0.9.0
-              with:
-                  ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-            - name: Add host key
               run: |
                   mkdir -p ~/.ssh
-                  ssh-keyscan -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+                  echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+                  chmod 600 ~/.ssh/id_rsa
+                  ssh-keyscan -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
 
-            - name: Deploy to server
+            - name: Update code on server
               env:
                   HOST: ${{ secrets.SSH_HOST }}
                   PORT: ${{ secrets.SSH_PORT }}
                   USER: ${{ secrets.SSH_USER }}
               run: |
-                  # Обновляем код через git pull
-                  ssh -p $PORT $USER@$HOST "cd /opt/neura/m004 && git fetch origin main && git reset --hard origin/main"
+                  SSH_CMD="ssh $SSH_OPTS -p $PORT $USER@$HOST"
 
-                  # Собираем и перезапускаем
-                  ssh -p $PORT $USER@$HOST "cd /opt/neura/m004 && docker compose down && docker compose up --build -d"
+                  # Проверяем наличие git-репозитория, при отсутствии — клонируем
+                  $SSH_CMD bash -c '
+                    if [ ! -d /opt/neura/m004/.git ]; then
+                      echo "⚠️ Git repo not found, cloning..."
+                      git clone https://github.com/NeurAservice/neura-m004-research.git /opt/neura/m004
+                    fi
+                    cd /opt/neura/m004
+                    git fetch origin main
+                    git reset --hard origin/main
+                    echo "✅ Code updated to $(git log --oneline -1)"
+                  '
 
-                  # Ждём запуска
-                  sleep 15
+            - name: Build and restart container
+              env:
+                  HOST: ${{ secrets.SSH_HOST }}
+                  PORT: ${{ secrets.SSH_PORT }}
+                  USER: ${{ secrets.SSH_USER }}
+              run: |
+                  SSH_CMD="ssh $SSH_OPTS -p $PORT $USER@$HOST"
 
-                  # Проверяем health
-                  ssh -p $PORT $USER@$HOST "curl -sf http://localhost:3004/health || exit 1"
+                  # Запускаем сборку в фоне через nohup (избегаем SSH timeout при долгой сборке)
+                  $SSH_CMD bash -c '
+                    cd /opt/neura/m004
+                    nohup bash -c "
+                      docker compose down 2>&1
+                      docker compose up --build -d 2>&1
+                      echo \$? > /tmp/m004-build-exit-code
+                    " > /tmp/m004-build.log 2>&1 &
+                    echo \$!
+                  '
 
-                  echo "✅ Deploy successful!"
+                  echo "⏳ Build started, waiting for completion..."
+
+                  # Ожидание до 8 минут (сборка better-sqlite3 занимает время)
+                  for i in $(seq 1 48); do
+                    sleep 10
+                    RESULT=$($SSH_CMD "cat /tmp/m004-build-exit-code 2>/dev/null || echo RUNNING")
+                    if [ "$RESULT" != "RUNNING" ]; then
+                      echo "Build finished with exit code: $RESULT"
+                      if [ "$RESULT" != "0" ]; then
+                        echo "❌ Build failed! Last 50 lines of build log:"
+                        $SSH_CMD "tail -50 /tmp/m004-build.log"
+                        exit 1
+                      fi
+                      break
+                    fi
+                    echo "  ...still building (${i}0s elapsed)"
+                  done
+
+                  # Проверяем, не превышен ли таймаут
+                  FINAL=$($SSH_CMD "cat /tmp/m004-build-exit-code 2>/dev/null || echo RUNNING")
+                  if [ "$FINAL" = "RUNNING" ]; then
+                    echo "❌ Build timed out after 8 minutes!"
+                    $SSH_CMD "tail -50 /tmp/m004-build.log"
+                    exit 1
+                  fi
+
+            - name: Health check
+              env:
+                  HOST: ${{ secrets.SSH_HOST }}
+                  PORT: ${{ secrets.SSH_PORT }}
+                  USER: ${{ secrets.SSH_USER }}
+              run: |
+                  SSH_CMD="ssh $SSH_OPTS -p $PORT $USER@$HOST"
+
+                  echo "⏳ Waiting for container to become healthy..."
+
+                  # Retry health check до 90 секунд (контейнеру нужно время на start_period)
+                  for i in $(seq 1 18); do
+                    sleep 5
+                    HEALTH=$($SSH_CMD "curl -sf --max-time 5 http://localhost:3004/health 2>&1" || true)
+                    if echo "$HEALTH" | grep -q '"status"'; then
+                      echo "✅ Health check passed: $HEALTH"
+                      exit 0
+                    fi
+                    echo "  ...attempt $i/18 — not ready yet"
+                  done
+
+                  echo "❌ Health check failed after 90 seconds!"
+                  $SSH_CMD "docker ps --filter name=m004; docker logs neura-m004-research --tail 30"
+                  exit 1
+
+            - name: Cleanup
+              if: always()
+              env:
+                  HOST: ${{ secrets.SSH_HOST }}
+                  PORT: ${{ secrets.SSH_PORT }}
+                  USER: ${{ secrets.SSH_USER }}
+              run: |
+                  SSH_CMD="ssh $SSH_OPTS -p $PORT $USER@$HOST"
+                  $SSH_CMD "rm -f /tmp/m004-build.log /tmp/m004-build-exit-code" 2>/dev/null || true
