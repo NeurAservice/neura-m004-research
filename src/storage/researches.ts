@@ -21,6 +21,7 @@ interface ResearchRow {
   result: string | null;
   usage: string | null;
   error: string | null;
+  budget_metrics: string | null;
   created_at: string;
   updated_at: string;
   completed_at: string | null;
@@ -36,8 +37,8 @@ export function createResearch(research: ResearchResult): void {
   const stmt = db.prepare(`
     INSERT INTO researches (
       id, user_id, session_id, query, clarified_query, options, status,
-      progress, current_phase, result, usage, error, created_at, updated_at, completed_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      progress, current_phase, result, usage, error, budget_metrics, created_at, updated_at, completed_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   stmt.run(
@@ -53,6 +54,7 @@ export function createResearch(research: ResearchResult): void {
     research.output ? JSON.stringify(research.output) : null,
     research.usage ? JSON.stringify(research.usage) : null,
     research.error || null,
+    research.output?.budgetMetrics ? JSON.stringify(research.output.budgetMetrics) : null,
     research.createdAt || now,
     research.updatedAt || now,
     research.completedAt || null

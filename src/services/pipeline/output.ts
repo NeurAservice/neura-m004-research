@@ -1,11 +1,14 @@
 /**
  * @file src/services/pipeline/output.ts
- * @description Phase 5: Output - синтез финального отчёта
- * @context Формирует итоговый отчёт из верифицированных фактов
+ * @description Phase 5: Output — синтез финального отчёта с бюджетным контролем
+ * @context Формирует итоговый отчёт, включая partial completion и budget metrics
+ * @dependencies services/anthropic.ts, services/budget.ts
+ * @affects Финальный отчёт, метаданные
  */
 
 import config from '../../config';
 import { getAnthropicService } from '../anthropic';
+import { TokenBudgetManager, BudgetSnapshot } from '../budget';
 import { logger } from '../../utils/logger';
 import { getAuthorityLabel } from '../../config/authority';
 import { round, average } from '../../utils/helpers';
@@ -14,32 +17,14 @@ import {
   ResearchOptions,
   PlanningResult,
   ResearchQuestionResult,
+  ResearchMode,
+  PartialCompletion,
+  BudgetMetrics,
   Claim,
   Source,
   QualityMetrics,
 } from '../../types/research';
-
-interface VerificationSummary {
-  allResults: Array<{
-    claimId: number;
-    status: string;
-    confidence: number;
-    correction?: string;
-    verificationSources: Array<{ url: string; title: string; domain: string; authorityScore: number }>;
-    explanation?: string;
-  }>;
-  claims: Array<{
-    id: number;
-    text: string;
-    type: string;
-    sourceQuestionId: number;
-    originalContext: string;
-  }>;
-  verified: Array<unknown>;
-  partiallyCorrect: Array<unknown>;
-  incorrect: Array<unknown>;
-  unverifiable: Array<unknown>;
-}
+import { VerificationSummary } from './verification';
 
 interface OutputWithUsage extends ResearchOutput {
   usage?: { input: number; output: number };
@@ -47,6 +32,16 @@ interface OutputWithUsage extends ResearchOutput {
 
 /**
  * Синтезирует финальный output
+ *
+ * @param query - Исходный запрос пользователя
+ * @param planningResult - Результат фазы планирования
+ * @param researchResults - Результаты research фазы
+ * @param verificationSummary - Результат верификации
+ * @param options - Опции исследования
+ * @param mode - Режим (simple/standard/deep)
+ * @param requestId - ID запроса
+ * @param partialCompletion - Информация о частичном выполнении (если есть)
+ * @param budgetSnapshot - Снимок бюджета (если есть)
  */
 export async function synthesizeOutput(
   query: string,
@@ -54,7 +49,10 @@ export async function synthesizeOutput(
   researchResults: ResearchQuestionResult[],
   verificationSummary: VerificationSummary,
   options: ResearchOptions,
-  requestId?: string
+  mode: ResearchMode,
+  requestId?: string,
+  partialCompletion?: PartialCompletion,
+  budgetSnapshot?: BudgetSnapshot
 ): Promise<OutputWithUsage> {
   const anthropic = getAnthropicService();
 
@@ -189,21 +187,80 @@ export async function synthesizeOutput(
     requestId
   );
 
-  // 4. Генерируем disclaimer если много omitted
+  // 4. Генерируем disclaimer
+  let disclaimer: string | undefined;
+
+  // Disclaimer для высокого % omitted
   const omittedRate = verificationSummary.claims.length > 0
     ? omittedCount / verificationSummary.claims.length
     : 0;
 
-  let disclaimer: string | undefined;
   if (omittedRate > 0.3) {
     disclaimer = options.language === 'ru'
       ? `⚠️ **Примечание:** Часть найденной информации (${(omittedRate * 100).toFixed(0)}%) была исключена из отчёта, так как не удалось подтвердить её достоверность. Отчёт содержит только верифицированные факты.`
       : `⚠️ **Note:** Part of the found information (${(omittedRate * 100).toFixed(0)}%) was excluded from the report as it could not be verified. The report contains only verified facts.`;
   }
 
-  // 5. Добавляем источники к отчёту
+  // Disclaimer для упрощённой/пропущенной верификации
+  if (verificationSummary.verificationLevel === 'simplified') {
+    const simplifiedNote = options.language === 'ru'
+      ? `ℹ️ **Верификация:** Применена упрощённая верификация (без deep check). Показатели confidence являются оценочными.`
+      : `ℹ️ **Verification:** Simplified verification applied (no deep check). Confidence scores are estimates.`;
+    disclaimer = disclaimer ? `${disclaimer}\n\n${simplifiedNote}` : simplifiedNote;
+  } else if (verificationSummary.verificationLevel === 'skipped') {
+    const skippedNote = options.language === 'ru'
+      ? `⚠️ **Верификация:** Верификация фактов была пропущена из-за бюджетных ограничений. Данные основаны на результатах поиска без дополнительной проверки.`
+      : `⚠️ **Verification:** Fact verification was skipped due to budget constraints. Data is based on search results without additional checks.`;
+    disclaimer = disclaimer ? `${disclaimer}\n\n${skippedNote}` : skippedNote;
+  }
+
+  // 5. Собираем partial completion блок в начале отчёта
+  let partialNotice = '';
+  if (partialCompletion && partialCompletion.isPartial) {
+    const lang = options.language;
+    if (lang === 'ru') {
+      partialNotice = `> ℹ️ **Частичный результат**\n` +
+        `> Исследовано ${partialCompletion.coveredQuestions} из ${partialCompletion.plannedQuestions} запланированных вопросов.\n` +
+        `> Уровень верификации: ${partialCompletion.verificationLevel}.\n` +
+        (partialCompletion.circuitBreakerTriggered
+          ? `> Бюджет ограничен (уровень: ${partialCompletion.circuitBreakerLevel}).\n`
+          : '') +
+        '\n';
+    } else {
+      partialNotice = `> ℹ️ **Partial Result**\n` +
+        `> Researched ${partialCompletion.coveredQuestions} of ${partialCompletion.plannedQuestions} planned questions.\n` +
+        `> Verification level: ${partialCompletion.verificationLevel}.\n` +
+        (partialCompletion.circuitBreakerTriggered
+          ? `> Budget constrained (level: ${partialCompletion.circuitBreakerLevel}).\n`
+          : '') +
+        '\n';
+    }
+  }
+
+  // 6. Добавляем источники к отчёту
   const sourcesSection = formatSourcesSection(sources, options.language);
-  const fullReport = `${reportResult.report}\n\n${sourcesSection}`;
+  const fullReport = `${partialNotice}${reportResult.report}\n\n${sourcesSection}`;
+
+  // 7. Формируем budget metrics если есть snapshot
+  let budgetMetrics: BudgetMetrics | undefined;
+  if (budgetSnapshot) {
+    const totalTokens = budgetSnapshot.consumed.totalTokens;
+    const maxTokens = budgetSnapshot.limits.maxTokens;
+    const usedPct = maxTokens > 0 ? (totalTokens / maxTokens) * 100 : 0;
+
+    budgetMetrics = {
+      mode,
+      limits: { maxTokens: budgetSnapshot.limits.maxTokens, maxCostUsd: budgetSnapshot.limits.maxCostUsd },
+      consumed: { totalTokens: budgetSnapshot.consumed.totalTokens, totalCostUsd: budgetSnapshot.consumed.totalCostUsd },
+      byPhase: budgetSnapshot.byPhase,
+      circuitBreaker: {
+        triggered: budgetSnapshot.circuitBreaker.triggered,
+        level: budgetSnapshot.circuitBreaker.level,
+        triggeredAtPct: usedPct,
+      },
+      degradations: budgetSnapshot.degradations || [],
+    };
+  }
 
   logger.info('Output synthesized', {
     request_id: requestId,
@@ -212,6 +269,8 @@ export async function synthesizeOutput(
     sources_total: sources.length,
     quality_score: quality.compositeScore,
     has_disclaimer: !!disclaimer,
+    is_partial: partialCompletion?.isPartial || false,
+    verification_level: verificationSummary.verificationLevel,
   });
 
   return {
@@ -221,13 +280,15 @@ export async function synthesizeOutput(
     sources,
     quality,
     metadata: {
-      mode: options.mode === 'auto' ? 'standard' : options.mode,
+      mode: mode,
       queryType: 'mixed',
       language: options.language,
       createdAt: new Date().toISOString(),
-      pipeline_version: '1.0.0',
+      pipeline_version: '2.0.0',
     },
     disclaimer,
+    partialCompletion,
+    budgetMetrics,
     usage: reportResult.usage,
   };
 }

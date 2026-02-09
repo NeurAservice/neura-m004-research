@@ -42,10 +42,14 @@ export const config = {
   // AI Providers
   perplexityApiKey: process.env.PERPLEXITY_API_KEY || '',
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
+  openaiApiKey: process.env.OPENAI_API_KEY || '',
 
   // Models
   perplexityModel: process.env.PERPLEXITY_MODEL || 'sonar-pro',
   claudeModel: process.env.CLAUDE_MODEL || 'claude-sonnet-4-20250514',
+  openaiModelTriage: process.env.OPENAI_MODEL_TRIAGE || 'gpt-4.1-nano',
+  openaiModelClaimDecomposition: process.env.OPENAI_MODEL_CLAIM_DECOMPOSITION || 'gpt-4.1-mini',
+  openaiModelDeepCheck: process.env.OPENAI_MODEL_DEEP_CHECK || 'gpt-4.1-nano',
 
   // Storage
   dataPath: process.env.DATA_PATH || path.join(process.cwd(), 'data'),
@@ -54,7 +58,21 @@ export const config = {
   // Quality settings
   defaultConfidenceThreshold: parseFloat(process.env.DEFAULT_CONFIDENCE_THRESHOLD || '0.80'),
   maxQuestionsSimple: parseInt(process.env.MAX_QUESTIONS_SIMPLE || '3', 10),
-  maxQuestionsStandard: parseInt(process.env.MAX_QUESTIONS_STANDARD || '10', 10),
+  maxQuestionsStandard: parseInt(process.env.MAX_QUESTIONS_STANDARD || '5', 10),
+  maxQuestionsDeep: parseInt(process.env.MAX_QUESTIONS_DEEP || '10', 10),
+
+  // Budget limits
+  budgetSimpleMaxCostUsd: parseFloat(process.env.BUDGET_SIMPLE_MAX_COST_USD || '0.30'),
+  budgetSimpleMaxTokens: parseInt(process.env.BUDGET_SIMPLE_MAX_TOKENS || '50000', 10),
+  budgetStandardMaxCostUsd: parseFloat(process.env.BUDGET_STANDARD_MAX_COST_USD || '1.00'),
+  budgetStandardMaxTokens: parseInt(process.env.BUDGET_STANDARD_MAX_TOKENS || '200000', 10),
+  budgetDeepMaxCostUsd: parseFloat(process.env.BUDGET_DEEP_MAX_COST_USD || '5.00'),
+  budgetDeepMaxTokens: parseInt(process.env.BUDGET_DEEP_MAX_TOKENS || '500000', 10),
+
+  // Circuit Breaker thresholds (%)
+  circuitBreakerWarning: parseInt(process.env.CIRCUIT_BREAKER_WARNING || '70', 10),
+  circuitBreakerCritical: parseInt(process.env.CIRCUIT_BREAKER_CRITICAL || '85', 10),
+  circuitBreakerStop: parseInt(process.env.CIRCUIT_BREAKER_STOP || '93', 10),
 
   // Logging
   logLevel: process.env.LOG_LEVEL || 'info',

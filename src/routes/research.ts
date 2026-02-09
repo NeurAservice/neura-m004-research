@@ -158,6 +158,45 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
 });
 
 /**
+ * GET /api/research/user/history
+ * Получает историю исследований пользователя
+ * ВАЖНО: Этот роут должен быть ПЕРЕД роутами с :id, иначе 'user' будет распознан как :id
+ */
+router.get('/user/history', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.query.user_id as string;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    if (!userId) {
+      throw new ValidationError('user_id is required');
+    }
+
+    const history = getResearchHistory(userId, limit, offset);
+
+    res.json({
+      status: 'success',
+      data: {
+        items: history.items.map(r => ({
+          id: r.id,
+          query: r.query,
+          status: r.status,
+          quality_score: r.output?.quality?.compositeScore,
+          created_at: r.createdAt,
+          completed_at: r.completedAt,
+        })),
+        total: history.total,
+        limit,
+        offset,
+      },
+    });
+
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * POST /api/research/:id/clarify
  * Отвечает на уточняющие вопросы
  */
@@ -285,44 +324,6 @@ router.get('/:id/status', async (req: Request, res: Response, next: NextFunction
         status: research.status,
         progress: research.progress,
         currentPhase: research.currentPhase,
-      },
-    });
-
-  } catch (error) {
-    next(error);
-  }
-});
-
-/**
- * GET /api/research/history
- * Получает историю исследований
- */
-router.get('/user/history', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.query.user_id as string;
-    const limit = parseInt(req.query.limit as string) || 20;
-    const offset = parseInt(req.query.offset as string) || 0;
-
-    if (!userId) {
-      throw new ValidationError('user_id is required');
-    }
-
-    const history = getResearchHistory(userId, limit, offset);
-
-    res.json({
-      status: 'success',
-      data: {
-        items: history.items.map(r => ({
-          id: r.id,
-          query: r.query,
-          status: r.status,
-          quality_score: r.output?.quality?.compositeScore,
-          created_at: r.createdAt,
-          completed_at: r.completedAt,
-        })),
-        total: history.total,
-        limit,
-        offset,
       },
     });
 

@@ -131,6 +131,32 @@ function createTables(database: Database.Database): void {
   `);
 
   logger.info('Database tables created/verified');
+
+  // Миграции: добавление новых колонок (idempotent)
+  runMigrations(database);
+}
+
+/**
+ * Выполняет миграции (добавление новых колонок)
+ * Безопасно — если колонка уже существует, ошибка игнорируется
+ */
+function runMigrations(database: Database.Database): void {
+  const migrations = [
+    // v2.0.0: budget_metrics для хранения данных бюджета
+    `ALTER TABLE researches ADD COLUMN budget_metrics TEXT`,
+  ];
+
+  for (const sql of migrations) {
+    try {
+      database.exec(sql);
+    } catch (error) {
+      // Колонка уже существует — это нормально
+      const msg = error instanceof Error ? error.message : '';
+      if (!msg.includes('duplicate column')) {
+        logger.warn('Migration warning', { sql, error: msg });
+      }
+    }
+  }
 }
 
 /**

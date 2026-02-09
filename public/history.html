@@ -23,26 +23,27 @@
       <div class="header-actions">
         <a href="/" class="btn btn-primary btn-sm" data-i18n="header.newResearch">Новое исследование</a>
 
-        <!-- Balance Widget -->
-        <div class="balance-widget">
-          <button id="balance-trigger" class="balance-trigger">
-            <svg viewBox="0 0 24 24">
-              <path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
+        <!-- Balance Widget (Standard) - унифицирован с index.html -->
+        <div class="balance-popover-wrapper">
+          <button type="button" id="balance-toggle" class="balance-toggle" data-i18n-title="header.balanceTitle" title="Показать баланс">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4.75 7.5h14.5a1.75 1.75 0 0 1 1.75 1.75v6.5A1.75 1.75 0 0 1 19.25 17.5H4.75A1.75 1.75 0 0 1 3 15.75v-6.5A1.75 1.75 0 0 1 4.75 7.5Zm0 0V6.25A2.25 2.25 0 0 1 7 4h7.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+              <path d="M7.5 13.25h3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
             </svg>
-            <span data-i18n="header.balance">Баланс</span>
           </button>
-
-          <div id="balance-popover" class="balance-popover">
-            <div class="balance-popover-header">
-              <h3 data-i18n="balance.title">Ваш баланс</h3>
-              <button id="balance-close" class="balance-popover-close">×</button>
+          <div id="balance-popover" class="balance-popover" hidden>
+            <div class="balance-popover__header">
+              <span class="balance-popover__title" data-i18n="balance.title">Баланс</span>
+              <button type="button" class="balance-popover__close" id="balance-close">&times;</button>
             </div>
-            <div class="balance-popover-body">
-              <div id="balance-amount" class="balance-amount" data-i18n="balance.loading">Загрузка...</div>
-              <div class="balance-actions">
-                <button id="refresh-balance" class="btn btn-secondary btn-sm" data-i18n="balance.refresh">Обновить</button>
-                <a id="topup-btn" href="#" class="btn btn-primary btn-sm hidden" target="_blank" data-i18n="balance.topup">Пополнить</a>
-              </div>
+            <div class="balance-popover__value">
+              <span id="balance-value">--</span>
+              <span id="balance-currency" data-i18n="balance.credits">кредитов</span>
+            </div>
+            <p class="balance-popover__updated" id="balance-updated" data-i18n="balance.updatedAt">Обновлено: --:--</p>
+            <div class="balance-popover__actions">
+              <button type="button" id="balance-refresh" data-i18n="balance.refresh">Обновить</button>
+              <a href="#" id="balance-topup" class="balance-popover__topup" data-i18n="balance.topup">Пополнить</a>
             </div>
           </div>
         </div>
@@ -87,10 +88,10 @@
       },
 
       bindEvents() {
-        // Balance widget
-        const balanceTrigger = document.getElementById('balance-trigger');
-        if (balanceTrigger) {
-          balanceTrigger.addEventListener('click', () => this.toggleBalancePopover());
+        // Balance widget (унифицировано с index.html)
+        const balanceToggle = document.getElementById('balance-toggle');
+        if (balanceToggle) {
+          balanceToggle.addEventListener('click', () => this.toggleBalancePopover());
         }
 
         const balanceClose = document.getElementById('balance-close');
@@ -98,15 +99,15 @@
           balanceClose.addEventListener('click', () => this.closeBalancePopover());
         }
 
-        const refreshBalance = document.getElementById('refresh-balance');
-        if (refreshBalance) {
-          refreshBalance.addEventListener('click', () => this.fetchBalance());
+        const balanceRefresh = document.getElementById('balance-refresh');
+        if (balanceRefresh) {
+          balanceRefresh.addEventListener('click', () => this.fetchBalance());
         }
 
         document.addEventListener('click', (e) => {
           const popover = document.getElementById('balance-popover');
-          const trigger = document.getElementById('balance-trigger');
-          if (popover && !popover.contains(e.target) && !trigger.contains(e.target)) {
+          const toggle = document.getElementById('balance-toggle');
+          if (popover && toggle && !popover.contains(e.target) && !toggle.contains(e.target)) {
             this.closeBalancePopover();
           }
         });
@@ -115,35 +116,42 @@
       toggleBalancePopover() {
         const popover = document.getElementById('balance-popover');
         if (popover) {
-          popover.classList.toggle('open');
-          if (popover.classList.contains('open')) {
+          const isHidden = popover.hasAttribute('hidden');
+          if (isHidden) {
+            popover.removeAttribute('hidden');
             this.fetchBalance();
+          } else {
+            popover.setAttribute('hidden', '');
           }
         }
       },
 
       closeBalancePopover() {
         const popover = document.getElementById('balance-popover');
-        if (popover) popover.classList.remove('open');
+        if (popover) popover.setAttribute('hidden', '');
       },
 
       async fetchBalance() {
-        const amountEl = document.getElementById('balance-amount');
-        const topupBtn = document.getElementById('topup-btn');
+        const valueEl = document.getElementById('balance-value');
+        const topupBtn = document.getElementById('balance-topup');
+        const updatedEl = document.getElementById('balance-updated');
 
-        if (amountEl) amountEl.textContent = i18n.t('balance.loading');
+        if (valueEl) valueEl.textContent = '...';
 
         try {
           const result = await api.getBalance();
-          if (amountEl && result.data) {
-            amountEl.textContent = `${result.data.balance} ${i18n.t('balance.credits')}`;
-          }
-          if (topupBtn && result.data?.topup_url) {
-            topupBtn.href = result.data.topup_url;
-            topupBtn.classList.remove('hidden');
+          if (result.data) {
+            if (valueEl) valueEl.textContent = result.data.balance;
+            if (topupBtn && result.data.topup_url) {
+              topupBtn.href = result.data.topup_url;
+            }
+            if (updatedEl) {
+              const now = new Date();
+              updatedEl.textContent = `${i18n.t('balance.updatedAt')} ${now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`;
+            }
           }
         } catch (error) {
-          if (amountEl) amountEl.textContent = i18n.t('balance.error');
+          if (valueEl) valueEl.textContent = i18n.t('balance.error') || 'Ошибка';
         }
       },
 

@@ -59,8 +59,16 @@ router.post('/research', async (req: Request, res: Response, next: NextFunction)
     const orchestrator = new ResearchOrchestrator(requestId);
     const researchId = orchestrator.getResearchId();
 
-    // Выполняем исследование
-    const result = await orchestrator.execute(query, body.caller_module, options);
+    // Выполняем исследование (skipClarification=true для API-вызовов)
+    // API не поддерживает интерактивные уточняющие вопросы,
+    // поэтому запрос должен быть подробным и понятным изначально
+    const result = await orchestrator.execute(
+      query,
+      body.caller_module,
+      options,
+      undefined,  // clarificationAnswers
+      true        // skipClarification - пропускаем фазу уточнений для API
+    );
 
     if (result.status === 'failed') {
       throw new Error(result.error || 'Research failed');

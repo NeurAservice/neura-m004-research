@@ -1,11 +1,14 @@
 /**
  * @file src/services/pipeline/triage.ts
- * @description Phase 0: Triage - классификация и анализ запроса
- * @context Определяет тип запроса и режим исследования
+ * @description Phase 0: Triage — классификация запроса через GPT-4.1-nano
+ * @context Определяет тип запроса, режим (simple/standard/deep) и сложность
+ * @dependencies services/openai.ts, config/prompts.ts
+ * @affects Выбор режима pipeline, создание TokenBudgetManager
  */
 
 import config from '../../config';
-import { getAnthropicService } from '../anthropic';
+import { getOpenAIService } from '../openai';
+import { TRIAGE_INSTRUCTIONS } from '../../config/prompts';
 import { logger } from '../../utils/logger';
 import {
   TriageResult,
@@ -19,14 +22,18 @@ interface TriageWithUsage extends TriageResult {
 }
 
 /**
- * Выполняет triage запроса
+ * Выполняет triage запроса через GPT-4.1-nano
+ * @param query - Исследовательский запрос пользователя
+ * @param options - Опции исследования
+ * @param requestId - ID запроса для логирования
+ * @returns Результат классификации с режимом и оценками
  */
 export async function triage(
   query: string,
   options: ResearchOptions,
   requestId?: string
 ): Promise<TriageWithUsage> {
-  const anthropic = getAnthropicService();
+  const openai = getOpenAIService();
 
   // Если пользователь явно указал режим, используем его
   const userMode = options.mode !== 'auto' ? options.mode : undefined;
@@ -60,13 +67,16 @@ Respond in JSON:
   "reasoning": "brief explanation"
 }`;
 
-  const result = await anthropic.completeJson<{
+  const result = await openai.completeJson<{
     queryType: string;
     complexity: number;
     estimatedQuestions: number;
     reasoning: string;
   }>(prompt, {
+    model: config.openaiModelTriage,
+    instructions: TRIAGE_INSTRUCTIONS,
     temperature: 0.1,
+    maxTokens: 500,
     requestId,
     defaultValue: {
       queryType: 'mixed',
@@ -76,7 +86,7 @@ Respond in JSON:
     },
   });
 
-  // Определяем режим
+  // Определяем режим: simple / standard / deep
   let mode: ResearchMode;
   let modeSource: 'auto' | 'user';
 
@@ -85,12 +95,24 @@ Respond in JSON:
     modeSource = 'user';
   } else {
     // Auto-определение по complexity
-    mode = result.data.complexity <= 2 ? 'simple' : 'standard';
+    const complexity = result.data.complexity;
+    if (complexity <= 2) {
+      mode = 'simple';
+    } else if (complexity <= 4) {
+      mode = 'standard';
+    } else {
+      mode = 'deep';
+    }
     modeSource = 'auto';
   }
 
   // Ограничиваем questions по режиму
-  const maxQuestions = mode === 'simple' ? config.maxQuestionsSimple : config.maxQuestionsStandard;
+  const maxQuestions = mode === 'simple'
+    ? config.maxQuestionsSimple
+    : mode === 'standard'
+      ? config.maxQuestionsStandard
+      : config.maxQuestionsDeep;
+
   const estimatedQuestions = Math.min(result.data.estimatedQuestions, maxQuestions);
 
   // Валидируем queryType
@@ -100,8 +122,11 @@ Respond in JSON:
     : 'mixed';
 
   // Оценки стоимости и времени
-  const costPerQuestion = mode === 'simple' ? 0.03 : 0.05;
-  const timePerQuestion = mode === 'simple' ? 8 : 15; // секунды
+  const costPerQuestion: Record<ResearchMode, number> = { simple: 0.02, standard: 0.04, deep: 0.06 };
+  const timePerQuestion: Record<ResearchMode, number> = { simple: 6, standard: 12, deep: 18 };
+
+  const cost = costPerQuestion[mode];
+  const time = timePerQuestion[mode];
 
   logger.info('Triage completed', {
     request_id: requestId,
@@ -110,6 +135,7 @@ Respond in JSON:
     modeSource,
     estimatedQuestions,
     complexity: result.data.complexity,
+    model: config.openaiModelTriage,
   });
 
   return {
@@ -118,12 +144,12 @@ Respond in JSON:
     modeSource,
     estimatedQuestions,
     estimatedCost: {
-      min: estimatedQuestions * costPerQuestion * 0.7,
-      max: estimatedQuestions * costPerQuestion * 1.5,
+      min: estimatedQuestions * cost * 0.7,
+      max: estimatedQuestions * cost * 1.5,
     },
     estimatedDuration: {
-      min: estimatedQuestions * timePerQuestion * 0.7,
-      max: estimatedQuestions * timePerQuestion * 1.5,
+      min: estimatedQuestions * time * 0.7,
+      max: estimatedQuestions * time * 1.5,
     },
     usage: result.usage,
   };

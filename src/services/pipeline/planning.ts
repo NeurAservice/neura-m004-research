@@ -1,11 +1,14 @@
 /**
  * @file src/services/pipeline/planning.ts
- * @description Phase 2: Planning - декомпозиция на research questions
- * @context Разбивает запрос на конкретные вопросы для исследования
+ * @description Phase 2: Planning — декомпозиция на research questions
+ * @context Разбивает запрос на конкретные вопросы. Лимит: simple=3, standard=5, deep=10
+ * @dependencies services/anthropic.ts, services/budget.ts
+ * @affects Количество и качество research-вопросов
  */
 
 import config from '../../config';
 import { getAnthropicService } from '../anthropic';
+import { TokenBudgetManager } from '../budget';
 import { logger } from '../../utils/logger';
 import {
   PlanningResult,
@@ -20,19 +23,34 @@ interface PlanningWithUsage extends PlanningResult {
 }
 
 /**
- * Планирует исследование
+ * Планирует исследование с учётом бюджета
+ * @param query - Уточнённый запрос
+ * @param triageResult - Результат triage
+ * @param options - Опции исследования
+ * @param requestId - ID запроса
+ * @param budget - Менеджер бюджета (опционально)
+ * @returns Список research-вопросов и стратегия
  */
 export async function planResearch(
   query: string,
   triageResult: TriageResult,
   options: ResearchOptions,
-  requestId?: string
+  requestId?: string,
+  budget?: TokenBudgetManager
 ): Promise<PlanningWithUsage> {
   const anthropic = getAnthropicService();
 
+  // Определяем максимум вопросов по режиму
   const maxQuestions = triageResult.mode === 'simple'
     ? config.maxQuestionsSimple
-    : config.maxQuestionsStandard;
+    : triageResult.mode === 'deep'
+      ? config.maxQuestionsDeep
+      : config.maxQuestionsStandard;
+
+  // Получаем max_tokens из бюджета если доступен
+  const maxTokens = budget
+    ? budget.getMaxTokensForCall('planning')
+    : 2000;
 
   const researchTypeInstructions = {
     facts_only: 'Focus ONLY on factual questions. No analysis or predictions.',
@@ -49,7 +67,7 @@ Mode: ${triageResult.mode}
 Research type: ${options.researchType}
 ${researchTypeInstructions[options.researchType]}
 
-Create ${Math.min(triageResult.estimatedQuestions, maxQuestions)} specific research questions.
+Create exactly ${Math.min(triageResult.estimatedQuestions, maxQuestions)} specific research questions (maximum ${maxQuestions}).
 Each question should be:
 - Specific and searchable
 - Focused on one aspect
@@ -87,7 +105,7 @@ Respond in JSON:
     factTypes: string[];
   }>(prompt, {
     temperature: 0.3,
-    maxTokens: 2000,
+    maxTokens,
     requestId,
     defaultValue: {
       questions: [{ id: 1, text: query, type: 'factual', priority: 1, expectedFactTypes: ['facts'] }],
@@ -96,7 +114,12 @@ Respond in JSON:
     },
   });
 
-  // Преобразуем и валидируем questions
+  // Записываем расход в бюджет
+  if (budget && result.usage) {
+    budget.recordUsage('planning', config.claudeModel, result.usage.input, result.usage.output);
+  }
+
+  // Преобразуем и валидируем questions — программно обрезаем до maxQuestions
   const questions: ResearchQuestion[] = (result.data.questions || [])
     .slice(0, maxQuestions)
     .map((q, idx) => ({
@@ -140,6 +163,8 @@ Respond in JSON:
   logger.info('Planning completed', {
     request_id: requestId,
     questions_count: questions.length,
+    max_questions: maxQuestions,
+    mode: triageResult.mode,
     scope: result.data.scope,
   });
 

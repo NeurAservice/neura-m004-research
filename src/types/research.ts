@@ -9,7 +9,7 @@
 // ============================================
 
 export type QueryType = 'factual' | 'analytical' | 'speculative' | 'mixed';
-export type ResearchMode = 'simple' | 'standard';
+export type ResearchMode = 'simple' | 'standard' | 'deep';
 export type ModeSource = 'auto' | 'user';
 export type ResearchType = 'facts_only' | 'facts_and_analysis' | 'full';
 export type ReportLength = 'short' | 'medium' | 'long';
@@ -28,6 +28,7 @@ export interface ResearchOptions {
   confidenceThreshold: number;
   language: 'ru' | 'en';
   maxReportLength: ReportLength;
+  maxCost?: number; // Пользовательский лимит стоимости (для deep)
 }
 
 export const DEFAULT_OPTIONS: ResearchOptions = {
@@ -104,7 +105,7 @@ export interface ResearchQuestionResult {
   questionId: number;
   response: string;
   citations: Citation[];
-  tokensUsed: { input: number; output: number };
+  tokensUsed: { input: number; output: number; searchContextTokens: number; totalCost: number };
 }
 
 // ============================================
@@ -192,6 +193,35 @@ export interface ResearchMetadata {
   pipeline_version: string;
 }
 
+export interface PartialCompletion {
+  isPartial: boolean;
+  coveredQuestions: number;
+  plannedQuestions: number;
+  completedPhases: string[];
+  skippedPhases: string[];
+  verificationLevel: 'full' | 'simplified' | 'skipped';
+  circuitBreakerTriggered: boolean;
+  circuitBreakerLevel?: 'warning' | 'critical' | 'stop';
+}
+
+export interface BudgetMetrics {
+  mode: ResearchMode;
+  limits: { maxTokens: number; maxCostUsd: number };
+  consumed: { totalTokens: number; totalCostUsd: number };
+  byPhase: Record<string, {
+    tokens: number;
+    costUsd: number;
+    budgetPct: number;
+    usedPct: number;
+  }>;
+  circuitBreaker: {
+    triggered: boolean;
+    level?: 'warning' | 'critical' | 'stop';
+    triggeredAtPct: number;
+  };
+  degradations: string[];
+}
+
 export interface ResearchOutput {
   report: string;
   summary: string;
@@ -200,6 +230,8 @@ export interface ResearchOutput {
   quality: QualityMetrics;
   metadata: ResearchMetadata;
   disclaimer?: string;
+  partialCompletion?: PartialCompletion;
+  budgetMetrics?: BudgetMetrics;
 }
 
 // ============================================
@@ -239,7 +271,7 @@ export interface ResearchResult {
 export interface ProgressEvent {
   type: 'progress';
   phase: string;
-  status: string;
+  message: string;  // текстовое сообщение о прогрессе
   progress: number;
   details?: Record<string, unknown>;
 }
@@ -251,9 +283,10 @@ export interface ClarificationEvent {
 }
 
 export interface CompleteEvent {
-  type: 'complete';
+  type: 'completed';
   research_id: string;
   result: ResearchOutput;
+  quality?: QualityMetrics;
 }
 
 export interface ErrorEvent {

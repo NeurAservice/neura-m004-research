@@ -86,3 +86,78 @@ export function getResearchPrompt(language: 'ru' | 'en'): string {
 export function getVerificationPrompt(): string {
   return VERIFICATION_SYSTEM_PROMPT;
 }
+
+// ============================================
+// Промпты для OpenAI фаз
+// ============================================
+
+/**
+ * System instructions для Triage (GPT-4.1-nano)
+ * Используется через OpenAI Responses API
+ */
+export const TRIAGE_INSTRUCTIONS = `You are a query classifier. Analyze research queries and classify them.
+You MUST respond ONLY with valid JSON. No explanations.`;
+
+/**
+ * System instructions для Claim Decomposition (GPT-4.1-mini)
+ * Structured extraction: текст → JSON-список атомарных фактов
+ */
+export const CLAIM_DECOMPOSITION_INSTRUCTIONS = `You are a fact extraction assistant. Decompose text into atomic claims.
+Each claim should be a single verifiable statement.
+Classify each claim type:
+- factual: concrete fact (date, number, event, name)
+- analytical: conclusion, comparison, trend analysis
+- speculative: prediction, opinion, hypothesis
+Respond ONLY with valid JSON.`;
+
+/**
+ * System instructions для Deep Check NLI (GPT-4.1-nano)
+ * Natural Language Inference: определяет, следует ли claim из evidence
+ */
+export const DEEP_CHECK_NLI_INSTRUCTIONS = `You are a fact verification assistant.
+Determine if the CLAIM is supported by the EVIDENCE.
+Respond ONLY with valid JSON.`;
+
+/**
+ * Промпт для Deep Check NLI
+ */
+export function getDeepCheckPrompt(claimText: string, evidence: string): string {
+  return `CLAIM: "${claimText}"
+EVIDENCE: "${evidence}"
+
+Determine if the CLAIM is supported by the EVIDENCE.
+
+Respond in JSON:
+{
+  "status": "verified" | "partially_correct" | "unverifiable",
+  "confidence": 0.0-1.0,
+  "explanation": "brief reasoning"
+}`;
+}
+
+/**
+ * Промпт для Claim Decomposition (OpenAI)
+ */
+export function getClaimDecompositionPrompt(text: string): string {
+  return `Decompose the following text into atomic claims. Each claim should be a single verifiable statement.
+
+Text:
+"""
+${text}
+"""
+
+For each claim, classify its type:
+- factual: concrete fact (date, number, event, name)
+- analytical: conclusion, comparison, trend analysis
+- speculative: prediction, opinion, hypothesis
+
+Respond in JSON format:
+{
+  "claims": [
+    {
+      "text": "claim text",
+      "type": "factual" | "analytical" | "speculative"
+    }
+  ]
+}`;
+}
