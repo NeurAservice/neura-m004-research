@@ -26,6 +26,13 @@ const app = {
     await this.initializeUser();
     this.bindEvents();
     this.initBalanceWidget();
+
+    // Check if opening an existing research from history
+    const params = new URLSearchParams(window.location.search);
+    const researchId = params.get('research');
+    if (researchId) {
+      await this.loadExistingResearch(researchId);
+    }
   },
 
   /**
@@ -497,23 +504,41 @@ const app = {
     const container = document.getElementById('result-container');
     if (!container) return;
 
-    // Quality badge
+    // Quality badge with user-friendly explanation
     const qualityBadge = document.getElementById('quality-badge');
     if (qualityBadge && quality) {
       const score = quality.compositeScore || 0;
+      const pct = Math.round(score * 100);
       let level = 'low';
       let label = i18n.t('result.qualityLow');
+      let hint = i18n.t('result.qualityLowHint');
 
       if (score >= 0.8) {
         level = 'high';
         label = i18n.t('result.qualityHigh');
+        hint = i18n.t('result.qualityHighHint');
       } else if (score >= 0.6) {
         level = 'medium';
         label = i18n.t('result.qualityMedium');
+        hint = i18n.t('result.qualityMediumHint');
       }
 
       qualityBadge.className = `quality-badge ${level}`;
-      qualityBadge.textContent = `${label}: ${Math.round(score * 100)}%`;
+      qualityBadge.innerHTML = `${label}: ${pct}%`;
+      qualityBadge.title = hint;
+    }
+
+    // Quality explanation panel
+    const qualityExplain = document.getElementById('quality-explanation');
+    if (qualityExplain && quality) {
+      const score = quality.compositeScore || 0;
+      let hint;
+      if (score >= 0.8) hint = i18n.t('result.qualityHighHint');
+      else if (score >= 0.6) hint = i18n.t('result.qualityMediumHint');
+      else hint = i18n.t('result.qualityLowHint');
+
+      qualityExplain.textContent = hint;
+      qualityExplain.classList.remove('hidden');
     }
 
     // Report content
@@ -523,35 +548,58 @@ const app = {
       reportContent.innerHTML = this.parseMarkdown(result.report);
     }
 
-    // Sources
+    // Sources with user-friendly authority labels
     const sourcesList = document.getElementById('sources-list');
     if (sourcesList && result?.sources) {
-      sourcesList.innerHTML = result.sources.map((source, i) => `
-        <div class="source-item">
-          <span class="source-index">[${i + 1}]</span>
-          <div class="source-content">
-            <div class="source-title">
-              <a href="${source.url || '#'}" target="_blank" rel="noopener">${source.title || source.url || 'Unknown source'}</a>
-              <span class="source-authority ${this.getAuthorityClass(source.authorityScore || source.authority)}">
-                ${Math.round(((source.authorityScore || source.authority || 0)) * 100)}%
-              </span>
+      // Sources header hint
+      const sourcesHint = document.getElementById('sources-hint');
+      if (sourcesHint) {
+        sourcesHint.textContent = i18n.t('result.sourcesHint');
+        sourcesHint.classList.remove('hidden');
+      }
+
+      sourcesList.innerHTML = result.sources.map((source, i) => {
+        const authorityScore = source.authorityScore || source.authority || 0;
+        const authorityPct = Math.round(authorityScore * 100);
+        const authorityClass = this.getAuthorityClass(authorityScore);
+        const authorityLabel = this.getAuthorityLabel(authorityScore);
+        const domain = source.domain || (() => { try { return new URL(source.url).hostname; } catch { return source.url || 'unknown'; } })();
+
+        return `
+          <div class="source-item">
+            <span class="source-index">[${i + 1}]</span>
+            <div class="source-content">
+              <div class="source-title">
+                <a href="${source.url || '#'}" target="_blank" rel="noopener">${source.title || source.url || 'Источник'}</a>
+                <span class="source-authority ${authorityClass}" title="${authorityLabel}: ${authorityPct}%">
+                  ${authorityLabel} (${authorityPct}%)
+                </span>
+              </div>
+              <div class="source-domain">${domain}</div>
             </div>
-            <div class="source-domain">${source.domain || (() => { try { return new URL(source.url).hostname; } catch { return source.url || 'unknown'; } })()}</div>
           </div>
-        </div>
-      `).join('');
+        `;
+      }).join('');
     }
 
-    // Export buttons
+    // Export buttons — use fetch + blob for reliable downloads
     if (this.currentResearchId) {
       const exportMd = document.getElementById('export-md');
       const exportJson = document.getElementById('export-json');
 
       if (exportMd) {
-        exportMd.href = api.getExportUrl(this.currentResearchId, 'markdown');
+        exportMd.removeAttribute('href');
+        exportMd.onclick = (e) => {
+          e.preventDefault();
+          this.downloadExport(this.currentResearchId, 'markdown');
+        };
       }
       if (exportJson) {
-        exportJson.href = api.getExportUrl(this.currentResearchId, 'json');
+        exportJson.removeAttribute('href');
+        exportJson.onclick = (e) => {
+          e.preventDefault();
+          this.downloadExport(this.currentResearchId, 'json');
+        };
       }
     }
 
@@ -562,6 +610,91 @@ const app = {
     if (score >= 0.8) return 'high';
     if (score >= 0.5) return 'medium';
     return 'low';
+  },
+
+  /**
+   * Получить человекочитаемую метку авторитетности источника
+   * @param {number} score - Оценка авторитетности (0-1)
+   * @returns {string} Текстовая метка
+   */
+  getAuthorityLabel(score) {
+    if (score >= 0.8) return i18n.t('result.authorityHigh');
+    if (score >= 0.5) return i18n.t('result.authorityMedium');
+    return i18n.t('result.authorityLow');
+  },
+
+  /**
+   * Скачать экспорт исследования через fetch + blob
+   * @param {string} researchId - ID исследования
+   * @param {string} format - Формат ('markdown' | 'json')
+   */
+  async downloadExport(researchId, format) {
+    try {
+      const url = api.getExportUrl(researchId, format);
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error(`Export failed: ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const ext = format === 'markdown' ? 'md' : 'json';
+      const filename = `research_${researchId.substring(0, 8)}.${ext}`;
+
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+    } catch (error) {
+      console.error('Download failed:', error);
+      this.showToast(i18n.t('errors.network'), 'error');
+    }
+  },
+
+  /**
+   * Загрузить и отобразить существующее исследование по ID
+   * @param {string} researchId - ID исследования из URL-параметра
+   */
+  async loadExistingResearch(researchId) {
+    try {
+      // Скрываем форму, показываем загрузку
+      const form = document.getElementById('research-form');
+      if (form) form.classList.add('hidden');
+
+      const progressContainer = document.getElementById('progress-container');
+      if (progressContainer) {
+        progressContainer.classList.remove('hidden');
+        const statusText = progressContainer.querySelector('.status-text');
+        if (statusText) statusText.textContent = i18n.t('common.loading');
+      }
+
+      const response = await api.getResearch(researchId);
+      const data = response.data || response;
+
+      if (progressContainer) progressContainer.classList.add('hidden');
+
+      if (data && data.status === 'completed' && data.result) {
+        this.currentResearchId = researchId;
+        this.showResult(data.result, data.result.quality);
+      } else if (data && data.status === 'failed') {
+        this.showToast(i18n.t('errors.serverError'), 'error');
+        if (form) form.classList.remove('hidden');
+      } else {
+        this.showToast(i18n.t('history.noResult'), 'warning');
+        if (form) form.classList.remove('hidden');
+      }
+    } catch (error) {
+      console.error('Failed to load research:', error);
+      this.showToast(i18n.t('errors.network'), 'error');
+
+      const form = document.getElementById('research-form');
+      if (form) form.classList.remove('hidden');
+      const progressContainer = document.getElementById('progress-container');
+      if (progressContainer) progressContainer.classList.add('hidden');
+    }
   },
 
   parseMarkdown(text) {

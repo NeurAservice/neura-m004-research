@@ -219,20 +219,34 @@ export async function synthesizeOutput(
   if (partialCompletion && partialCompletion.isPartial) {
     const lang = options.language;
     if (lang === 'ru') {
-      partialNotice = `> ℹ️ **Частичный результат**\n` +
-        `> Исследовано ${partialCompletion.coveredQuestions} из ${partialCompletion.plannedQuestions} запланированных вопросов.\n` +
-        `> Уровень верификации: ${partialCompletion.verificationLevel}.\n` +
+      const verificationLabels: Record<string, string> = {
+        'full': 'полная — все факты перепроверены',
+        'simplified': 'базовая — факты проверены по одному источнику',
+        'skipped': 'не проводилась — результаты основаны только на поиске'
+      };
+      const vLevel = verificationLabels[partialCompletion.verificationLevel] || partialCompletion.verificationLevel;
+      partialNotice = `> ℹ️ **Результат с ограничениями**\n` +
+        `> Исследовано ${partialCompletion.coveredQuestions} из ${partialCompletion.plannedQuestions} запланированных аспектов темы.\n` +
+        `> Проверка фактов: ${vLevel}.\n` +
         (partialCompletion.circuitBreakerTriggered
-          ? `> Бюджет ограничен (уровень: ${partialCompletion.circuitBreakerLevel}).\n`
+          ? `> Исследование завершено досрочно из-за ограничений ресурсов.\n`
           : '') +
+        `> Для более глубокого анализа попробуйте режим «Глубокий» или «Стандартный».\n` +
         '\n';
     } else {
-      partialNotice = `> ℹ️ **Partial Result**\n` +
-        `> Researched ${partialCompletion.coveredQuestions} of ${partialCompletion.plannedQuestions} planned questions.\n` +
-        `> Verification level: ${partialCompletion.verificationLevel}.\n` +
+      const verificationLabels: Record<string, string> = {
+        'full': 'full — all facts cross-verified',
+        'simplified': 'basic — facts checked against single source',
+        'skipped': 'not performed — results based on search only'
+      };
+      const vLevel = verificationLabels[partialCompletion.verificationLevel] || partialCompletion.verificationLevel;
+      partialNotice = `> ℹ️ **Result with Limitations**\n` +
+        `> Researched ${partialCompletion.coveredQuestions} of ${partialCompletion.plannedQuestions} planned aspects.\n` +
+        `> Fact verification: ${vLevel}.\n` +
         (partialCompletion.circuitBreakerTriggered
-          ? `> Budget constrained (level: ${partialCompletion.circuitBreakerLevel}).\n`
+          ? `> Research completed early due to resource constraints.\n`
           : '') +
+        `> For deeper analysis, try "Deep" or "Standard" mode.\n` +
         '\n';
     }
   }
@@ -356,12 +370,27 @@ function calculateQualityMetrics(
 function formatSourcesSection(sources: Source[], language: 'ru' | 'en'): string {
   if (sources.length === 0) return '';
 
-  const header = language === 'ru' ? '## Источники' : '## Sources';
+  const header = language === 'ru' ? '## Использованные источники' : '## Sources';
   const sortedSources = [...sources].sort((a, b) => b.authority - a.authority);
+
+  /**
+   * Получить текстовый лейбл авторитетности для отчёта
+   */
+  const getAuthorityText = (score: number): string => {
+    if (language === 'ru') {
+      if (score >= 0.8) return 'Авторитетный';
+      if (score >= 0.5) return 'Надёжный';
+      return 'Непроверенный';
+    }
+    if (score >= 0.8) return 'Authoritative';
+    if (score >= 0.5) return 'Reliable';
+    return 'Unverified';
+  };
 
   const sourceLines = sortedSources.map(s => {
     const stars = getAuthorityLabel(s.authority);
-    return `[${s.id}] [${s.title}](${s.url}) — ${s.domain} ${stars}`;
+    const label = getAuthorityText(s.authority);
+    return `[${s.id}] [${s.title}](${s.url}) — ${s.domain} ${stars} (${label})`;
   });
 
   return `${header}\n\n${sourceLines.join('\n')}`;

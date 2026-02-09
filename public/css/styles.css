@@ -762,6 +762,60 @@ textarea.form-control {
   color: var(--danger-color);
 }
 
+/* History item action buttons */
+.history-item-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+}
+
+.history-item-buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.history-item-buttons .btn {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.75rem;
+}
+
+.history-quality {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.history-quality .quality-badge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.4rem;
+}
+
+/* Quality explanation */
+.quality-explanation {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  background: rgba(var(--primary-rgb, 99, 102, 241), 0.08);
+  border-left: 3px solid var(--primary-color);
+  border-radius: 0 var(--border-radius) var(--border-radius) 0;
+  line-height: 1.5;
+}
+
+/* Sources hint */
+.sources-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+  font-style: italic;
+}
+
+/* Quality badge cursor hint */
+.quality-badge {
+  cursor: help;
+}
+
 /* Toast Notifications */
 .toast-container {
   position: fixed;

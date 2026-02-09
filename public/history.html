@@ -193,18 +193,47 @@
           return;
         }
 
-        listEl.innerHTML = this.items.map(item => `
-          <a href="./?research=${item.id}" class="history-item">
-            <div class="history-item-content">
-              <div class="history-item-query">${this.escapeHtml(item.query)}</div>
-              <div class="history-item-meta">
-                <span>${this.formatDate(item.created_at)}</span>
-                ${item.quality_score ? `<span>${Math.round(item.quality_score * 100)}% качество</span>` : ''}
+        listEl.innerHTML = this.items.map(item => {
+          const isCompleted = item.status === 'completed';
+          const qualityPct = item.quality_score ? Math.round(item.quality_score * 100) : null;
+          const qualityClass = qualityPct >= 80 ? 'high' : qualityPct >= 60 ? 'medium' : 'low';
+          const qualityLabel = qualityPct >= 80
+            ? i18n.t('result.qualityHigh')
+            : qualityPct >= 60
+              ? i18n.t('result.qualityMedium')
+              : i18n.t('result.qualityLow');
+
+          return `
+            <div class="history-item">
+              <div class="history-item-content">
+                <div class="history-item-query">${this.escapeHtml(item.query)}</div>
+                <div class="history-item-meta">
+                  <span>${this.formatDate(item.created_at)}</span>
+                  ${qualityPct !== null ? `<span class="history-quality ${qualityClass}">${i18n.t('history.qualityLabel')}: ${qualityPct}% — ${qualityLabel}</span>` : ''}
+                </div>
+              </div>
+              <div class="history-item-actions">
+                <span class="history-item-status ${item.status}">${i18n.t('status.' + item.status)}</span>
+                ${isCompleted ? `
+                  <div class="history-item-buttons">
+                    <button class="btn btn-secondary btn-sm" onclick="historyPage.viewResearch('${item.id}')" title="${i18n.t('history.viewResult')}">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                      ${i18n.t('history.viewResult')}
+                    </button>
+                    <button class="btn btn-secondary btn-sm" onclick="historyPage.downloadExport('${item.id}', 'markdown')" title="${i18n.t('history.downloadMd')}">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                      .md
+                    </button>
+                    <button class="btn btn-secondary btn-sm" onclick="historyPage.downloadExport('${item.id}', 'json')" title="${i18n.t('history.downloadJson')}">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                      .json
+                    </button>
+                  </div>
+                ` : ''}
               </div>
             </div>
-            <span class="history-item-status ${item.status}">${i18n.t('status.' + item.status)}</span>
-          </a>
-        `).join('');
+          `;
+        }).join('');
       },
 
       formatDate(dateStr) {
@@ -222,6 +251,54 @@
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+      },
+
+      /**
+       * Скачивает экспорт исследования (MD или JSON) через fetch + blob
+       */
+      async downloadExport(researchId, format) {
+        try {
+          const url = api.getExportUrl(researchId, format);
+          const response = await fetch(url);
+
+          if (!response.ok) {
+            const error = await response.json().catch(() => ({ message: 'Ошибка загрузки' }));
+            throw new Error(error.message || 'Не удалось скачать файл');
+          }
+
+          const blob = await response.blob();
+          const ext = format === 'markdown' ? 'md' : 'json';
+          const filename = `research-${researchId.substring(0, 8)}.${ext}`;
+
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(a.href);
+        } catch (error) {
+          console.error('[History] Download failed:', error);
+          this.showToast(error.message || 'Ошибка скачивания', 'error');
+        }
+      },
+
+      /**
+       * Открывает результат исследования на главной странице
+       */
+      viewResearch(researchId) {
+        window.location.href = `./?research=${researchId}`;
+      },
+
+      showToast(message, type = 'info') {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        container.appendChild(toast);
+        setTimeout(() => toast.remove(), 5000);
       }
     };
 
