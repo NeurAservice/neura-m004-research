@@ -55,6 +55,10 @@ jobs:
           # Запускаем сборку в фоне через nohup с retry логикой
           $SSH_CMD bash -c '
             cd /opt/neura/m004
+
+            # КРИТИЧНО: Удаляем файлы от предыдущих запусков, чтобы избежать race condition
+            rm -f /tmp/m004-build-exit-code /tmp/m004-build.log
+
             nohup bash -c "
               # Cleanup old containers first
               docker compose down 2>&1 || true
