@@ -11,7 +11,7 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
 
     steps:
       - name: Checkout code
@@ -84,7 +84,20 @@ jobs:
 
               # Start container
               docker compose up -d 2>&1
-              echo \$? > /tmp/m004-build-exit-code
+              UP_EXIT=\$?
+
+              # Даём контейнеру 5 секунд на запуск
+              sleep 5
+
+              # Проверяем что контейнер реально запустился (не полагаемся на exit code compose)
+              if docker ps --filter name=neura-m004-research --format \"{{.Names}}\" | grep -q neura-m004-research; then
+                echo \"Container is running\"
+                echo 0 > /tmp/m004-build-exit-code
+              else
+                echo \"Container failed to start (compose exit: \$UP_EXIT)\"
+                docker ps -a --filter name=m004 2>&1
+                echo \$UP_EXIT > /tmp/m004-build-exit-code
+              fi
             " > /tmp/m004-build.log 2>&1 &
             echo \$!
           '
