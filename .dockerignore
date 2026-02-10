@@ -9,3 +9,4 @@ logs
 tests
 coverage
 .nyc_output
+golden-set

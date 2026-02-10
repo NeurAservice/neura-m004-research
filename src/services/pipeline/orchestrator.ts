@@ -1,9 +1,10 @@
 /**
  * @file src/services/pipeline/orchestrator.ts
- * @description Оркестратор pipeline исследования с бюджетным контролем
- * @context Главный модуль: создаёт TokenBudgetManager, передаёт во все фазы,
- *          обрабатывает circuit breaker, формирует partial completion
- * @dependencies services/budget.ts, все фазы pipeline
+ * @description Оркестратор pipeline исследования с бюджетным контролем и SourceRegistry
+ * @context Главный модуль: создаёт TokenBudgetManager + SourceRegistry, передаёт во все фазы,
+ *          обрабатывает circuit breaker, формирует partial completion.
+ *          Между Phase 4 и Phase 5 выполняется URL-валидация источников.
+ * @dependencies services/budget.ts, services/sourceRegistry.ts, все фазы pipeline
  * @affects Весь pipeline, биллинг, метаданные
  */
 
@@ -13,6 +14,7 @@ import config from '../../config';
 import { logger, createRequestLogger } from '../../utils/logger';
 import { UsageTracker, BillingUsage } from '../../types/billing';
 import { TokenBudgetManager, BudgetSnapshot } from '../budget';
+import { SourceRegistry } from '../sourceRegistry';
 import {
   ResearchResult,
   ResearchOptions,
@@ -28,6 +30,7 @@ import {
   Claim,
   Source,
   QualityMetrics,
+  QualityGateResult,
   UsageData,
   DEFAULT_OPTIONS,
 } from '../../types/research';
@@ -37,6 +40,8 @@ import { planResearch } from './planning';
 import { executeResearch } from './research';
 import { verifyAllClaims } from './verification';
 import { synthesizeOutput } from './output';
+import { runQualityGate, downgradeGrade } from './qualityGate';
+import { saveResearchStats, ResearchStats } from '../../utils/statsCollector';
 
 export class ResearchOrchestrator extends EventEmitter {
   private requestId: string;
@@ -128,6 +133,8 @@ export class ResearchOrchestrator extends EventEmitter {
       this.emitProgress('triage', options.language === 'en' ? `Analysis complete. Mode: ${mode}, type: ${triageResult.queryType}` : `Анализ завершён. Режим: ${mode}, тип: ${triageResult.queryType}`, 10, {
         queryType: triageResult.queryType,
         mode,
+        preTriageFloor: triageResult.preTriageFloor,
+        preTriageReasons: triageResult.preTriageReasons,
       });
 
       // ═══════════════════════════════════════════════════
@@ -166,6 +173,11 @@ export class ResearchOrchestrator extends EventEmitter {
         max_tokens: budget.getSnapshot().limits.maxTokens,
         max_cost_usd: budget.getSnapshot().limits.maxCostUsd,
       });
+
+      // Создаём SourceRegistry для единого реестра источников
+      const sourceRegistry = new SourceRegistry(this.requestId);
+
+      this.log.info('SourceRegistry initialized');
 
       // ═══════════════════════════════════════════════════
       // Phase 1: Clarification (ВНЕ бюджета)
@@ -236,7 +248,7 @@ export class ResearchOrchestrator extends EventEmitter {
 
       const plannedQuestions = planningResult.questions.length;
 
-      this.emitProgress('planning', options.language === 'en' ? `Planned ${plannedQuestions} research questions` : `Запланировано ${plannedQuestions} исследовательских вопросов`, 25, {
+      this.emitProgress('planning', options.language === 'en' ? `Planned ${plannedQuestions} research questions` : `Запланировано ${plannedQuestions} исследовательских вопросов`, 22, {
         questions_count: plannedQuestions,
         mode,
       });
@@ -244,7 +256,7 @@ export class ResearchOrchestrator extends EventEmitter {
       // ═══════════════════════════════════════════════════
       // Phase 3: Research (с бюджетом и адаптивностью)
       // ═══════════════════════════════════════════════════
-      this.emitProgress('research', options.language === 'en' ? 'Starting information gathering...' : 'Начинаем сбор информации...', 30);
+      this.emitProgress('research', options.language === 'en' ? 'Starting information gathering...' : 'Начинаем сбор информации...', 28);
       this.checkAborted();
 
       budget.startPhase('research');
@@ -253,10 +265,11 @@ export class ResearchOrchestrator extends EventEmitter {
         planningResult.questions,
         options,
         mode,
+        sourceRegistry,
         this.requestId,
         budget,
         (questionId, total, status) => {
-          const progress = 30 + Math.round((questionId / total) * 30);
+          const progress = 28 + Math.round((questionId / total) * 35);
           this.emitProgress('research', status, progress, { questionId, total });
         }
       );
@@ -274,7 +287,7 @@ export class ResearchOrchestrator extends EventEmitter {
 
       const coveredQuestions = researchResults.filter(r => r.response && r.response.length > 0).length;
 
-      this.emitProgress('research', options.language === 'en' ? `Collected data: ${coveredQuestions} of ${plannedQuestions} questions covered` : `Данные собраны: ${coveredQuestions} из ${plannedQuestions} вопросов покрыто`, 60, {
+      this.emitProgress('research', options.language === 'en' ? `Collected data: ${coveredQuestions} of ${plannedQuestions} questions covered` : `Данные собраны: ${coveredQuestions} из ${plannedQuestions} вопросов покрыто`, 63, {
         covered: coveredQuestions,
         planned: plannedQuestions,
       });
@@ -282,7 +295,7 @@ export class ResearchOrchestrator extends EventEmitter {
       // ═══════════════════════════════════════════════════
       // Phase 4: Verification (с бюджетом и деградацией)
       // ═══════════════════════════════════════════════════
-      this.emitProgress('verification', options.language === 'en' ? 'Starting fact verification...' : 'Начинаем верификацию фактов...', 62);
+      this.emitProgress('verification', options.language === 'en' ? 'Starting fact verification...' : 'Начинаем верификацию фактов...', 65);
       this.checkAborted();
 
       budget.startPhase('verification');
@@ -293,8 +306,9 @@ export class ResearchOrchestrator extends EventEmitter {
         mode,
         this.requestId,
         budget,
+        sourceRegistry,
         (current, total, status) => {
-          const progress = 62 + Math.round((current / total) * 20);
+          const progress = 65 + Math.round((current / total) * 13);
           this.emitProgress('verification', status, progress, { current, total });
         }
       );
@@ -308,12 +322,28 @@ export class ResearchOrchestrator extends EventEmitter {
         }
       }
 
-      this.emitProgress('verification', options.language === 'en' ? `Verification complete (level: ${verificationResults.verificationLevel})` : `Верификация завершена (уровень: ${verificationResults.verificationLevel === 'full' ? 'полная' : verificationResults.verificationLevel === 'simplified' ? 'упрощённая' : 'пропущена'})`, 82, {
+      this.emitProgress('verification', options.language === 'en' ? `Verification complete (level: ${verificationResults.verificationLevel})` : `Верификация завершена (уровень: ${verificationResults.verificationLevel === 'full' ? 'полная' : verificationResults.verificationLevel === 'simplified' ? 'упрощённая' : 'пропущена'})`, 78, {
         verification_level: verificationResults.verificationLevel,
       });
 
       // ═══════════════════════════════════════════════════
-      // Phase 5: Output (с partial completion)
+      // Phase 4.5: URL Validation (между верификацией и output)
+      // ═══════════════════════════════════════════════════
+      this.emitProgress('verification', options.language === 'en' ? 'Validating source URLs...' : 'Проверка доступности источников...', 80);
+
+      const urlValidationResults = await sourceRegistry.validateUrls({
+        maxConcurrency: config.urlValidationMaxConcurrency,
+        timeoutMs: config.urlValidationTimeoutMs,
+      });
+
+      this.log.info('URL validation completed', {
+        total: urlValidationResults.total,
+        available: urlValidationResults.available,
+        unavailable: urlValidationResults.unavailable,
+      });
+
+      // ═══════════════════════════════════════════════════
+      // Phase 5: Output (с partial completion, Source Masking)
       // ═══════════════════════════════════════════════════
       this.emitProgress('output', options.language === 'en' ? 'Generating final report...' : 'Формирование финального отчёта...', 85);
       this.checkAborted();
@@ -344,12 +374,17 @@ export class ResearchOrchestrator extends EventEmitter {
         verificationResults,
         options,
         mode,
+        sourceRegistry,
         this.requestId,
         partialCompletion,
         budgetSnapshot
       );
+
+      // Определяем модель, использованную для output
+      const outputModel = mode === 'simple' ? config.claudeModelSimple : config.claudeModel;
+
       this.usageTracker.addUsage(
-        config.claudeModel,
+        outputModel,
         output.usage?.input || 0,
         output.usage?.output || 0
       );
@@ -358,13 +393,116 @@ export class ResearchOrchestrator extends EventEmitter {
       if (output.usage) {
         budget.recordUsage(
           'output',
-          config.claudeModel,
+          outputModel,
           output.usage.input || 0,
           output.usage.output || 0
         );
       }
 
-      // Обновляем budgetMetrics финальным snapshot (включает output costs)
+      // Обновляем budgetMetrics (промежуточный snapshot после output)
+      output.budgetMetrics = budget.getSnapshot();
+
+      this.emitProgress('output', options.language === 'en' ? 'Report generated' : 'Отчёт сформирован', 88);
+
+      // ═══════════════════════════════════════════════════
+      // Phase 5.5: Quality Gate (standard/deep only)
+      // ═══════════════════════════════════════════════════
+      let qgResult: QualityGateResult | null = null;
+
+      if (mode !== 'simple') {
+        this.emitProgress('quality_check', options.language === 'en' ? 'Checking report quality...' : 'Проверка качества отчёта...', 90);
+        this.checkAborted();
+
+        // Собираем verified claims для проверки
+        const verifiedClaimsForQG = output.claims
+          .filter(c => c.status === 'verified' || c.status === 'partially_correct')
+          .map(c => ({
+            text: c.text,
+            confidence: c.confidence,
+            sourceIds: c.sourceIds,
+          }));
+
+        qgResult = await runQualityGate(
+          output.report,
+          verifiedClaimsForQG,
+          { mode, requestId: this.requestId, budgetManager: budget }
+        );
+
+        // Записываем QG usage в UsageTracker
+        if (qgResult?.usage) {
+          this.usageTracker.addOpenAIUsage(
+            config.qualityGateModel,
+            qgResult.usage.input,
+            qgResult.usage.output
+          );
+        }
+      }
+
+      // Post-processing: Quality Gate actions
+      if (qgResult && !qgResult.passed) {
+        const originalGrade = output.grade;
+        output.grade = downgradeGrade(originalGrade);
+
+        // Штраф 15% на compositeScore
+        output.quality.compositeScore = Math.round(output.quality.compositeScore * 0.85 * 100) / 100;
+        output.quality.grade = output.grade;
+
+        // Добавляем предупреждение к отчёту
+        const qgWarning = options.language === 'ru'
+          ? `> ⚠️ **Проверка качества** обнаружила утверждения, не полностью подтверждённые источниками (${qgResult.unfaithfulStatements.length} шт.). Грейд понижен.\n\n`
+          : `> ⚠️ **Quality check** found statements not fully supported by sources (${qgResult.unfaithfulStatements.length}). Grade downgraded.\n\n`;
+
+        output.report = qgWarning + output.report;
+
+        this.log.warn('Quality Gate failed, grade downgraded', {
+          original_grade: originalGrade,
+          new_grade: output.grade,
+          faithfulness_score: qgResult.faithfulnessScore,
+          unfaithful_count: qgResult.unfaithfulStatements.length,
+        });
+      }
+
+      // Persist QG result в output
+      output.qualityGate = qgResult ? {
+        passed: qgResult.passed,
+        faithfulnessScore: qgResult.faithfulnessScore,
+        unfaithfulCount: qgResult.unfaithfulStatements.length,
+      } : null;
+
+      // ═══════════════════════════════════════════════════
+      // Warnings — формирование массива предупреждений
+      // ═══════════════════════════════════════════════════
+      const warnings: string[] = [];
+
+      if (output.grade === 'F') {
+        warnings.push('INSUFFICIENT_DATA');
+      }
+      if (output.grade === 'C' && mode !== 'deep') {
+        warnings.push('SUGGEST_DEEPER_MODE');
+      }
+      if (qgResult && !qgResult.passed) {
+        warnings.push('QUALITY_GATE_FAILED');
+      }
+
+      output.warnings = warnings;
+
+      // ═══════════════════════════════════════════════════
+      // Числовое логирование — статистика numerical claims
+      // ═══════════════════════════════════════════════════
+      const numericalClaims = verificationResults.claims.filter(c => c.type === 'numerical');
+      if (numericalClaims.length > 0) {
+        this.log.info('Numerical claims statistics', {
+          total_numerical_claims: numericalClaims.length,
+          verified_numerical: numericalClaims.filter(c => {
+            const vr = verificationResults.allResults.find(r => r.claimId === c.id);
+            return vr && vr.status === 'verified';
+          }).length,
+        });
+      }
+
+      this.emitProgress('quality_check', options.language === 'en' ? 'Quality check complete' : 'Проверка качества завершена', 94);
+
+      // Финально обновляем budgetMetrics (включает QG costs)
       output.budgetMetrics = budget.getSnapshot();
 
       this.emitProgress('output', options.language === 'en' ? 'Report ready!' : 'Отчёт готов!', 100);
@@ -415,11 +553,43 @@ export class ResearchOrchestrator extends EventEmitter {
         duration_ms: duration,
         mode,
         quality_score: output.quality.compositeScore,
+        grade: output.grade,
         facts_verified: output.quality.facts.verified,
         facts_total: output.quality.facts.total,
+        sources_total: sourceRegistry.getCount(),
         is_partial: isPartial,
         verification_level: verificationResults.verificationLevel,
+        quality_gate_passed: qgResult?.passed ?? null,
+        faithfulness_score: qgResult?.faithfulnessScore ?? null,
+        warnings: output.warnings,
       });
+
+      // ═══════════════════════════════════════════════════
+      // Автосбор статистики (fire-and-forget)
+      // ═══════════════════════════════════════════════════
+      saveResearchStats({
+        timestamp: new Date().toISOString(),
+        requestId: this.requestId,
+        mode,
+        queryWordCount: query.split(/\s+/).length,
+        preTriageFloor: triageResult.preTriageFloor,
+        finalMode: mode,
+        totalClaims: verificationResults.claims.length,
+        verifiedClaims: verificationResults.verified.length,
+        partiallyCorrectClaims: verificationResults.partiallyCorrect.length,
+        omittedClaims: verificationResults.claims.length - verificationResults.verified.length - verificationResults.partiallyCorrect.length - verificationResults.incorrect.length - verificationResults.unverifiable.length,
+        numericalClaims: verificationResults.claims.filter(c => c.type === 'numerical').length,
+        sourcesTotal: sourceRegistry.getAllSources().length,
+        sourcesAvailable: sourceRegistry.getAllSources().filter(s => s.status === 'available' || s.status === 'unchecked').length,
+        compositeScore: output.quality.compositeScore,
+        grade: output.grade,
+        qualityGatePassed: qgResult?.passed ?? null,
+        faithfulnessScore: qgResult?.faithfulnessScore ?? null,
+        totalCostUsd: finalSnapshot.consumed.totalCostUsd,
+        durationMs: duration,
+        verificationLevel: verificationResults.verificationLevel,
+        goldenSet: this.requestId.startsWith('gs-'),
+      }).catch(() => {}); // Игнорируем ошибки
 
       return result;
 
@@ -487,6 +657,7 @@ export class ResearchOrchestrator extends EventEmitter {
     // Цены (USD за токен)
     const prices: Record<string, { input: number; output: number }> = {
       'claude-sonnet-4-20250514': { input: 3 / 1_000_000, output: 15 / 1_000_000 },
+      'claude-haiku-4-5-20251001': { input: 1 / 1_000_000, output: 5 / 1_000_000 },
       'gpt-4.1-nano': { input: 0.1 / 1_000_000, output: 0.4 / 1_000_000 },
       'gpt-4.1-mini': { input: 0.4 / 1_000_000, output: 1.6 / 1_000_000 },
     };

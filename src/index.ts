@@ -6,6 +6,7 @@
 
 import { createApp } from './app';
 import { initDatabase, cleanupOldData } from './storage/database';
+import { initStatsDir } from './utils/statsCollector';
 import config from './config';
 import { logger } from './utils/logger';
 
@@ -25,6 +26,15 @@ async function main(): Promise<void> {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     process.exit(1);
+  }
+
+  // Инициализация директории для статистики (fire-and-forget)
+  try {
+    await initStatsDir();
+  } catch (error) {
+    logger.warn('Stats directory initialization failed, will retry on first write', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
   }
 
   // Запуск очистки старых данных (раз в час)

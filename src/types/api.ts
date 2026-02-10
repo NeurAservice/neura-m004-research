@@ -17,6 +17,7 @@ export interface CreateResearchRequest {
   session_id?: string;
   shell_id?: string;
   origin_url?: string;
+  skip_clarification?: boolean;
 }
 
 export interface ClarifyRequest {

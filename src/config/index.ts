@@ -74,6 +74,47 @@ export const config = {
   circuitBreakerCritical: parseInt(process.env.CIRCUIT_BREAKER_CRITICAL || '85', 10),
   circuitBreakerStop: parseInt(process.env.CIRCUIT_BREAKER_STOP || '93', 10),
 
+  // Claude model for simple mode (Haiku)
+  claudeModelSimple: process.env.CLAUDE_MODEL_SIMPLE || 'claude-haiku-4-5-20251001',
+
+  // Grade thresholds
+  gradeAThreshold: parseFloat(process.env.GRADE_A_THRESHOLD || '0.85'),
+  gradeBThreshold: parseFloat(process.env.GRADE_B_THRESHOLD || '0.65'),
+  gradeCThreshold: parseFloat(process.env.GRADE_C_THRESHOLD || '0.40'),
+
+  // Narrative thresholds (min verified claims for narrative report)
+  narrativeThresholdSimple: parseInt(process.env.NARRATIVE_THRESHOLD_SIMPLE || '3', 10),
+  narrativeThresholdStandard: parseInt(process.env.NARRATIVE_THRESHOLD_STANDARD || '5', 10),
+  narrativeThresholdDeep: parseInt(process.env.NARRATIVE_THRESHOLD_DEEP || '10', 10),
+
+  // Max output tokens per mode
+  maxOutputTokensSimple: parseInt(process.env.MAX_OUTPUT_TOKENS_SIMPLE || '2000', 10),
+  maxOutputTokensStandard: parseInt(process.env.MAX_OUTPUT_TOKENS_STANDARD || '5000', 10),
+  maxOutputTokensDeep: parseInt(process.env.MAX_OUTPUT_TOKENS_DEEP || '10000', 10),
+
+  // Pre-triage thresholds
+  preTriageWordCountStandard: parseInt(process.env.PRE_TRIAGE_WORD_COUNT_STANDARD || '50', 10),
+  preTriageWordCountDeep: parseInt(process.env.PRE_TRIAGE_WORD_COUNT_DEEP || '150', 10),
+  preTriageQuestionCountStandard: parseInt(process.env.PRE_TRIAGE_QUESTION_COUNT_STANDARD || '3', 10),
+  preTriageQuestionCountDeep: parseInt(process.env.PRE_TRIAGE_QUESTION_COUNT_DEEP || '6', 10),
+
+  // Adaptive verification
+  adaptiveVerificationEnabled: process.env.ADAPTIVE_VERIFICATION_ENABLED !== 'false', // default true
+  adaptiveVerificationMinRemainingRatio: parseFloat(process.env.ADAPTIVE_VERIFICATION_MIN_REMAINING || '0.35'),
+
+  // URL validation
+  urlValidationMaxConcurrency: parseInt(process.env.URL_VALIDATION_MAX_CONCURRENCY || '10', 10),
+  urlValidationTimeoutMs: parseInt(process.env.URL_VALIDATION_TIMEOUT_MS || '3000', 10),
+
+  // Quality Gate
+  qualityGateEnabled: process.env.QUALITY_GATE_ENABLED !== 'false', // default true
+  qualityGatePassThreshold: parseFloat(process.env.QUALITY_GATE_PASS_THRESHOLD || '0.75'),
+  qualityGateModel: process.env.QUALITY_GATE_MODEL || 'gpt-4.1-mini',
+  qualityGateMaxTokens: parseInt(process.env.QUALITY_GATE_MAX_TOKENS || '2000', 10),
+
+  // Stats collection
+  statsCollectionEnabled: process.env.STATS_COLLECTION_ENABLED !== 'false', // default true
+
   // Logging
   logLevel: process.env.LOG_LEVEL || 'info',
   logFormat: process.env.LOG_FORMAT || 'json',

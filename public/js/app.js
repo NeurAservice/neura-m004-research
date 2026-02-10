@@ -447,6 +447,19 @@ const app = {
     const container = document.getElementById('result-container');
     if (!container) return;
 
+    // Grade badge (A/B/C/F) с тултипом
+    const gradeBadge = document.getElementById('grade-badge');
+    const gradeValue = result?.grade || quality?.grade;
+    if (gradeBadge && gradeValue) {
+      const gradeClass = `grade-${gradeValue.toLowerCase()}`;
+      const gradeLabel = i18n.t(`result.grade${gradeValue}`) || `Grade ${gradeValue}`;
+      const gradeHint = i18n.t(`result.grade${gradeValue}Hint`) || '';
+      const gradeTooltipText = i18n.t(`gradeTooltips.${gradeValue}`) || gradeHint;
+      gradeBadge.className = `grade-badge ${gradeClass}`;
+      gradeBadge.innerHTML = `<span class="grade-letter">${gradeValue}</span><span class="grade-label">${gradeLabel}</span>${gradeTooltipText ? `<span class="grade-tooltip">${this.escapeHtml(gradeTooltipText)}</span>` : ''}`;
+      gradeBadge.title = gradeHint;
+    }
+
     // Quality badge с понятным пояснением
     const qualityBadge = document.getElementById('quality-badge');
     if (qualityBadge && quality) {
@@ -499,6 +512,40 @@ const app = {
       }
       qualityExplainer.textContent = description;
       qualityExplainer.className = `quality-explainer ${level}`;
+    }
+
+    // Quality metrics details
+    this.renderQualityMetrics(quality);
+
+    // Grade warning block для оценок C и F
+    const gradeWarningsEl = document.getElementById('grade-warnings');
+    if (gradeWarningsEl) {
+      gradeWarningsEl.innerHTML = '';
+      if (gradeValue === 'C' || gradeValue === 'F') {
+        const warningClass = gradeValue === 'F' ? 'grade-warning-f' : 'grade-warning-c';
+        const warningKey = gradeValue === 'F' ? 'warnings.grade_f_message' : 'warnings.suggest_deeper_standard';
+        const warningMsg = i18n.t(warningKey) || (gradeValue === 'F'
+          ? 'Данные недостаточно подтверждены. Рекомендуем перепроверить ключевые факты.'
+          : 'Рекомендуем повторить исследование в глубоком режиме для повышения достоверности.');
+        gradeWarningsEl.innerHTML = `<div class="grade-warning ${warningClass}"><span class="warning-icon">⚠️</span><span class="warning-text">${this.escapeHtml(warningMsg)}</span></div>`;
+      }
+
+      // Рендеринг предупреждений из массива warnings
+      if (result?.warnings && result.warnings.length > 0) {
+        const warningKeyMap = {
+          'QUALITY_GATE_FAILED': 'warnings.quality_gate_warning',
+          'INSUFFICIENT_DATA': 'warnings.grade_f_message',
+          'SUGGEST_DEEPER_MODE': 'warnings.suggest_deeper_standard'
+        };
+        result.warnings.forEach(warningCode => {
+          const i18nKey = warningKeyMap[warningCode];
+          const msg = i18nKey ? i18n.t(i18nKey) : warningCode;
+          if (msg && !gradeWarningsEl.innerHTML.includes(msg)) {
+            const cls = warningCode === 'INSUFFICIENT_DATA' ? 'grade-warning-f' : 'grade-warning-c';
+            gradeWarningsEl.innerHTML += `<div class="grade-warning ${cls}"><span class="warning-icon">⚠️</span><span class="warning-text">${this.escapeHtml(msg)}</span></div>`;
+          }
+        });
+      }
     }
 
     // Report content
@@ -690,6 +737,51 @@ const app = {
     container.className = 'toast-container';
     document.body.appendChild(container);
     return container;
+  },
+
+  /**
+   * Рендерит детальные метрики качества под grade badge
+   */
+  renderQualityMetrics(quality) {
+    let metricsEl = document.getElementById('quality-metrics');
+    if (!metricsEl) {
+      metricsEl = document.createElement('div');
+      metricsEl.id = 'quality-metrics';
+      metricsEl.className = 'quality-metrics';
+      const gradeBadge = document.getElementById('grade-badge');
+      if (gradeBadge && gradeBadge.parentElement) {
+        gradeBadge.parentElement.appendChild(metricsEl);
+      }
+    }
+
+    if (!quality) {
+      metricsEl.innerHTML = '';
+      return;
+    }
+
+    const pct = (v) => `${Math.round((v || 0) * 100)}%`;
+    const isRu = (i18n.locale === 'ru' || !i18n.locale);
+
+    const metrics = [
+      { label: i18n.t('result.metricsVerification') || (isRu ? 'Верификация' : 'Verification'), value: pct(quality.verificationPassRate) },
+      { label: i18n.t('result.metricsCitation') || (isRu ? 'Цитирование' : 'Citation'), value: pct(quality.citationCoverage) },
+      { label: i18n.t('result.metricsAuthority') || (isRu ? 'Авторитетность' : 'Authority'), value: pct(quality.sourceAuthorityScore) },
+    ];
+
+    if (quality.facts) {
+      metrics.push({ label: isRu ? 'Факты' : 'Facts', value: `${quality.facts.verified || 0}/${quality.facts.total || 0}` });
+      if (quality.facts.numerical > 0) {
+        metrics.push({ label: i18n.t('result.metricsNumerical') || (isRu ? 'Числовых' : 'Numerical'), value: `${quality.facts.numerical}` });
+      }
+    }
+
+    if (quality.sourcesCount !== undefined) {
+      metrics.push({ label: i18n.t('result.metricsSources') || (isRu ? 'Источников' : 'Sources'), value: `${quality.sourcesCount}` });
+    }
+
+    metricsEl.innerHTML = metrics.map(m =>
+      `<div class="metric-item"><span class="metric-label">${m.label}</span><span class="metric-value">${m.value}</span></div>`
+    ).join('');
   },
 
   /**

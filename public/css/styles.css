@@ -985,3 +985,159 @@ textarea.form-control {
   transition: opacity 0.15s ease;
 }
 
+/* ═══════════════════════════════════════
+   Grade Badge + Tooltip
+   ═══════════════════════════════════════ */
+
+.grade-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: var(--border-radius);
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: var(--transition);
+  position: relative;
+}
+
+.grade-badge .grade-letter {
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.grade-badge .grade-label {
+  font-size: 0.75rem;
+  opacity: 0.85;
+}
+
+.grade-badge .grade-tooltip {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1f2937;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 400;
+  width: 240px;
+  text-align: center;
+  z-index: 10;
+  white-space: normal;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+
+.grade-badge .grade-tooltip::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-bottom-color: #1f2937;
+}
+
+.grade-badge:hover .grade-tooltip {
+  display: block;
+}
+
+.grade-badge.grade-a {
+  background: rgba(40, 167, 69, 0.15);
+  color: #28a745;
+  border: 1px solid rgba(40, 167, 69, 0.3);
+}
+
+.grade-badge.grade-b {
+  background: rgba(74, 144, 217, 0.15);
+  color: #4a90d9;
+  border: 1px solid rgba(74, 144, 217, 0.3);
+}
+
+.grade-badge.grade-c {
+  background: rgba(255, 193, 7, 0.15);
+  color: #ffc107;
+  border: 1px solid rgba(255, 193, 7, 0.3);
+}
+
+.grade-badge.grade-f {
+  background: rgba(220, 53, 69, 0.15);
+  color: #dc3545;
+  border: 1px solid rgba(220, 53, 69, 0.3);
+}
+
+/* ═══════════════════════════════════════
+   Grade Warning Blocks (C/F)
+   ═══════════════════════════════════════ */
+
+.grade-warning {
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.grade-warning-c {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #f59e0b;
+}
+
+.grade-warning-f {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #ef4444;
+}
+
+.grade-warning .warning-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.grade-warning .warning-text {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* ═══════════════════════════════════════
+   Quality Metrics Grid
+   ═══════════════════════════════════════ */
+
+.quality-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--border-radius);
+}
+
+.quality-metrics .metric-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 4.5rem;
+}
+
+.quality-metrics .metric-label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.quality-metrics .metric-value {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+

@@ -141,7 +141,7 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
 
     // Запускаем исследование
     try {
-      const result = await orchestrator.execute(query, userId, options);
+      const result = await orchestrator.execute(query, userId, options, undefined, body.skip_clarification || false);
 
       // Обновляем БД
       updateResearch(researchId, {

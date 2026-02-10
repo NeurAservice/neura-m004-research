@@ -10,6 +10,7 @@ import config from '../../config';
 import { getOpenAIService } from '../openai';
 import { TRIAGE_INSTRUCTIONS } from '../../config/prompts';
 import { logger } from '../../utils/logger';
+import { preTriage, elevate } from '../../utils/preTriage';
 import {
   TriageResult,
   ResearchOptions,
@@ -93,19 +94,45 @@ Respond in JSON:
   let mode: ResearchMode;
   let modeSource: 'auto' | 'user';
 
+  // Шаг 1: Pre-triage (эвристики) — определяем минимальный floor
+  const preTriageResult = preTriage(query);
+
+  logger.info('Pre-triage completed', {
+    request_id: requestId,
+    floor: preTriageResult.floor,
+    reasons: preTriageResult.reasons,
+    query_word_count: query.split(/\s+/).filter(Boolean).length,
+    question_marks: (query.match(/\?/g) || []).length,
+  });
+
   if (userMode) {
     mode = userMode;
     modeSource = 'user';
   } else {
-    // Auto-определение по complexity
+    // Шаг 2: Auto-определение LLM по complexity
     const complexity = result.data.complexity;
+    let llmMode: ResearchMode;
     if (complexity <= 2) {
-      mode = 'simple';
+      llmMode = 'simple';
     } else if (complexity <= 4) {
-      mode = 'standard';
+      llmMode = 'standard';
     } else {
-      mode = 'deep';
+      llmMode = 'deep';
     }
+
+    // Шаг 3: Объединение — LLM может повышать, но не понижать ниже floor
+    mode = elevate(preTriageResult.floor, llmMode);
+
+    if (mode !== llmMode) {
+      logger.info('Pre-triage elevated mode', {
+        request_id: requestId,
+        llm_mode: llmMode,
+        pre_triage_floor: preTriageResult.floor,
+        final_mode: mode,
+        reasons: preTriageResult.reasons,
+      });
+    }
+
     modeSource = 'auto';
   }
 
@@ -154,6 +181,8 @@ Respond in JSON:
       min: estimatedQuestions * time * 0.7,
       max: estimatedQuestions * time * 1.5,
     },
+    preTriageFloor: preTriageResult.floor,
+    preTriageReasons: preTriageResult.reasons,
     usage: result.usage,
   };
 }

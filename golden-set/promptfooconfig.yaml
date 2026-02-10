@@ -1,0 +1,23 @@
+# Golden Set config для m004 NeurA Research
+# Запуск: cd golden-set && npx promptfoo eval --config promptfooconfig.yaml
+
+description: "m004 Golden Set - Smoke Tests"
+
+providers:
+  - "file://providers/m004-internal.js"
+
+prompts:
+  - "{{query}}"
+
+tests: "datasets/smoke.yaml"
+
+# Output
+outputPath: "output/smoke-results.json"
+
+# Настройки
+defaultTest:
+  options:
+    # Не использовать кэш — каждый прогон реальный
+    cache: false
+    # Timeout на evaluation (не на HTTP — тот в provider)
+    timeout: 900000

@@ -59,7 +59,8 @@
     "planning": "Plan",
     "research": "Search",
     "verification": "Verify",
-    "output": "Report"
+    "output": "Report",
+    "qualityCheck": "QA Check"
   },
   "clarification": {
     "title": "Clarify your request",
@@ -91,7 +92,22 @@
     "export": "Export",
     "exportMarkdown": "Markdown",
     "exportJson": "JSON",
-    "exportPdf": "PDF"
+    "exportPdf": "PDF",
+    "grade": "Grade",
+    "gradeA": "A — Excellent",
+    "gradeB": "B — Good",
+    "gradeC": "C — Satisfactory",
+    "gradeF": "F — Low quality",
+    "gradeAHint": "High reliability: most facts verified with reliable sources",
+    "gradeBHint": "Good quality: key facts verified, some details need clarification",
+    "gradeCHint": "Satisfactory: some facts unconfirmed, additional verification recommended",
+    "gradeFHint": "Low quality: most facts unconfirmed, use with caution",
+    "metricsVerification": "Verification",
+    "metricsCitation": "Citation",
+    "metricsAuthority": "Authority",
+    "metricsOmission": "Facts omitted",
+    "metricsSources": "Sources",
+    "metricsNumerical": "Numerical facts"
   },
   "history": {
     "title": "Research history",
@@ -112,6 +128,18 @@
     "serverError": "Server error",
     "topupUnavailable": "Top-up link unavailable. Contact support.",
     "identityFailed": "Identity error. Please reload the page."
+  },
+  "warnings": {
+    "quality_gate_warning": "ℹ️ Quality check found statements not fully supported by sources. Grade downgraded.",
+    "grade_f_message": "Insufficient verified data. Results are provided for reference only. We recommend using a deeper mode.",
+    "suggest_deeper_standard": "Some facts are unverified. Consider repeating the research in Standard mode for better accuracy.",
+    "suggest_deeper_deep": "Some facts are unverified. Consider repeating the research in Deep mode for maximum verification."
+  },
+  "gradeTooltips": {
+    "A": "High reliability. Most facts are verified by sources.",
+    "B": "Good reliability. Key facts are verified, minor gaps exist.",
+    "C": "Limited reliability. Some facts are unverified. We recommend double-checking.",
+    "F": "Insufficient verified data. Results are provided for reference only."
   },
   "common": {
     "loading": "Loading...",

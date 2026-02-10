@@ -14,7 +14,7 @@ import { logger } from '../utils/logger';
 
 export type BudgetAction = 'proceed' | 'reduce' | 'stop';
 export type BudgetStatus = 'normal' | 'warning' | 'critical' | 'stop';
-export type BudgetPhase = 'triage' | 'planning' | 'research' | 'verification' | 'output';
+export type BudgetPhase = 'triage' | 'planning' | 'research' | 'verification' | 'output' | 'qualityGate';
 export type ResearchModeForBudget = 'simple' | 'standard' | 'deep';
 
 export interface BudgetLimits {
@@ -58,9 +58,9 @@ export interface CircuitBreakerConfig {
 
 /** Распределение бюджета по фазам (%) */
 const BUDGET_ALLOCATION: Record<ResearchModeForBudget, Record<BudgetPhase, number>> = {
-  simple:   { triage: 3,  planning: 12, research: 55, verification: 23, output: 7 },
-  standard: { triage: 2,  planning: 10, research: 50, verification: 31, output: 7 },
-  deep:     { triage: 1,  planning: 8,  research: 52, verification: 33, output: 6 },
+  simple:   { triage: 3,  planning: 12, research: 55, verification: 23, output: 7,  qualityGate: 0 },
+  standard: { triage: 2,  planning: 8,  research: 50, verification: 28, output: 9,  qualityGate: 3 },
+  deep:     { triage: 1,  planning: 6,  research: 48, verification: 30, output: 11, qualityGate: 4 },
 };
 
 /** Потолки токенов на одиночный вызов */
@@ -71,17 +71,19 @@ const CALL_TOKEN_CAPS: Record<string, number> = {
   claimDecomposition: 3000,
   deepCheck: 500,
   output: 8000,
+  qualityGate: 3000,
 };
 
 /** Цены моделей за токен (USD) */
 const MODEL_PRICES: Record<string, { input: number; output: number }> = {
   'claude-sonnet-4-20250514': { input: 3 / 1_000_000, output: 15 / 1_000_000 },
+  'claude-haiku-4-5-20251001': { input: 1 / 1_000_000, output: 5 / 1_000_000 },
   'gpt-4.1-nano':            { input: 0.1 / 1_000_000, output: 0.4 / 1_000_000 },
   'gpt-4.1-mini':            { input: 0.4 / 1_000_000, output: 1.6 / 1_000_000 },
 };
 
 /** Порядок фаз для перетекания бюджета */
-const PHASE_ORDER: BudgetPhase[] = ['triage', 'planning', 'research', 'verification', 'output'];
+const PHASE_ORDER: BudgetPhase[] = ['triage', 'planning', 'research', 'verification', 'output', 'qualityGate'];
 
 /** Максимальное превышение фазового бюджета (30%) */
 const PHASE_OVERSHOOT_FACTOR = 1.3;
@@ -145,6 +147,7 @@ export class TokenBudgetManager {
       research: { tokens: 0, costUsd: 0, calls: 0 },
       verification: { tokens: 0, costUsd: 0, calls: 0 },
       output: { tokens: 0, costUsd: 0, calls: 0 },
+      qualityGate: { tokens: 0, costUsd: 0, calls: 0 },
     };
 
     // Инициализируем бонусы
@@ -154,6 +157,7 @@ export class TokenBudgetManager {
       research: { tokens: 0, costUsd: 0 },
       verification: { tokens: 0, costUsd: 0 },
       output: { tokens: 0, costUsd: 0 },
+      qualityGate: { tokens: 0, costUsd: 0 },
     };
 
     logger.info('TokenBudgetManager created', {
@@ -495,6 +499,7 @@ export class TokenBudgetManager {
       case 'deepCheck':
         return 'verification';
       case 'output': return 'output';
+      case 'qualityGate': return 'qualityGate';
       default: return 'research';
     }
   }

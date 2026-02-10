@@ -1,0 +1,117 @@
+name: Golden Set - Smoke
+
+on:
+    workflow_dispatch:
+    workflow_call:
+
+concurrency:
+    group: golden-set
+    cancel-in-progress: false
+
+jobs:
+    smoke:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
+
+            - name: Setup SSH tunnel
+              run: |
+                  mkdir -p ~/.ssh
+                  echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+                  chmod 600 ~/.ssh/id_rsa
+                  ssh-keyscan -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+                  ssh -f -N -L 3004:localhost:3004 \
+                    -o StrictHostKeyChecking=yes \
+                    -o ServerAliveInterval=30 \
+                    -p ${{ secrets.SSH_PORT }} \
+                    ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
+                  echo "SSH tunnel established"
+                  sleep 2
+                  # Verify tunnel works
+                  curl -sf http://localhost:3004/health || (echo "Tunnel health check failed" && exit 1)
+
+            - name: Install promptfoo
+              working-directory: golden-set
+              run: npm install promptfoo
+
+            - name: Create output directory
+              working-directory: golden-set
+              run: mkdir -p output
+
+            - name: Run smoke tests
+              working-directory: golden-set
+              env:
+                  M004_API_URL: "http://localhost:3004"
+                  M004_INTERNAL_API_KEY: ${{ secrets.M004_INTERNAL_API_KEY }}
+              run: |
+                  npx promptfoo eval \
+                    --config promptfooconfig.yaml \
+                    --output output/smoke-results.json \
+                    --no-cache \
+                    2>&1 | tee output/smoke-log.txt
+
+            - name: Parse results and create summary
+              if: always()
+              working-directory: golden-set
+              run: |
+                  if [ ! -f output/smoke-results.json ]; then
+                    echo "## 🧪 Golden Set Smoke Results" >> $GITHUB_STEP_SUMMARY
+                    echo "" >> $GITHUB_STEP_SUMMARY
+                    echo "❌ No results file found — tests may have crashed." >> $GITHUB_STEP_SUMMARY
+                    exit 0
+                  fi
+
+                  node -e "
+                    const fs = require('fs');
+                    const results = JSON.parse(fs.readFileSync('output/smoke-results.json', 'utf-8'));
+
+                    const total = results.results?.length || 0;
+                    const passed = results.results?.filter(r => r.success).length || 0;
+                    const failed = total - passed;
+
+                    let summary = '## 🧪 Golden Set Smoke Results\n\n';
+                    summary += '| Metric | Value |\n|---|---|\n';
+                    summary += '| Total tests | ' + total + ' |\n';
+                    summary += '| Passed | ✅ ' + passed + ' |\n';
+                    summary += '| Failed | ' + (failed > 0 ? '❌' : '✅') + ' ' + failed + ' |\n\n';
+
+                    if (failed > 0) {
+                      summary += '### Failed Tests\n\n';
+                      for (const r of results.results || []) {
+                        if (!r.success) {
+                          const failedAsserts = (r.gradingResult?.componentResults || [])
+                            .filter(a => !a.pass)
+                            .map(a => a.reason)
+                            .join(', ');
+                          summary += '- **' + (r.vars?.query?.substring(0, 60) || 'unknown') + '**: ' + failedAsserts + '\n';
+                        }
+                      }
+                    }
+
+                    fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
+
+                    // Warning annotation (не fail workflow)
+                    if (failed > 0) {
+                      console.log('::warning::Golden Set Smoke: ' + failed + ' of ' + total + ' tests failed');
+                    }
+                  "
+
+            - name: Upload results
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: golden-set-smoke-${{ github.run_number }}
+                  path: golden-set/output/
+                  retention-days: 30
+
+            - name: Close SSH tunnel
+              if: always()
+              run: pkill -f "ssh.*-L 3004" || true

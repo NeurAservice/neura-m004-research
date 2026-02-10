@@ -1,7 +1,10 @@
 /**
  * @file src/services/anthropic.ts
  * @description Клиент для Anthropic Claude API
- * @context Используется для планирования, синтеза и анализа
+ * @context Используется для планирования (Phase 2), синтеза (Phase 5) и анализа.
+ *          Поддерживает Source Masking: Phase 5 получает только verified claims + sources.
+ * @dependencies config, types/errors, utils/logger, utils/helpers
+ * @affects Стоимость Claude API, качество финального отчёта
  */
 
 import config from '../config';
@@ -51,6 +54,8 @@ export class AnthropicService {
 
   /**
    * Отправляет запрос к Claude
+   * @param prompt - Текст запроса
+   * @param options.model - Модель (по умолчанию из config)
    */
   async complete(
     prompt: string,
@@ -59,6 +64,7 @@ export class AnthropicService {
       temperature?: number;
       maxTokens?: number;
       requestId?: string;
+      model?: string;
     } = {}
   ): Promise<{
     content: string;
@@ -69,10 +75,13 @@ export class AnthropicService {
       temperature = 0.3,
       maxTokens = 4000,
       requestId,
+      model,
     } = options;
 
+    const modelToUse = model || this.model;
+
     const requestBody: ClaudeRequest = {
-      model: this.model,
+      model: modelToUse,
       max_tokens: maxTokens,
       messages: [{ role: 'user', content: prompt }],
       temperature,
@@ -119,7 +128,7 @@ export class AnthropicService {
       const duration = Date.now() - startTime;
       const content = response.content[0]?.text || '';
 
-      logAiCall(requestId || 'unknown', 'anthropic', this.model, 'complete', {
+      logAiCall(requestId || 'unknown', 'anthropic', modelToUse, 'complete', {
         prompt_length: prompt.length,
         response_length: content.length,
         duration_ms: duration,
@@ -154,6 +163,7 @@ export class AnthropicService {
       maxTokens?: number;
       requestId?: string;
       defaultValue: T;
+      model?: string;
     }
   ): Promise<{
     data: T;
@@ -166,6 +176,7 @@ export class AnthropicService {
       temperature: options.temperature,
       maxTokens: options.maxTokens,
       requestId: options.requestId,
+      model: options.model,
     });
 
     const jsonText = extractJsonFromText(result.content);
@@ -268,15 +279,50 @@ Respond in JSON format:
   }
 
   /**
-   * Синтез финального отчёта
+   * Синтез финального отчёта (Phase 5)
+   *
+   * Source Masking: Claude получает ТОЛЬКО верифицированные факты и источники.
+   * Сырой текст из Phase 3 (Perplexity) НЕ передаётся — это предотвращает
+   * распространение непроверенной информации.
+   *
+   * @param data.query - Исходный запрос пользователя
+   * @param data.questions - Список исследовательских вопросов (только текст)
+   * @param data.verifiedClaims - Верифицированные факты с confidence и sourceIds
+   * @param data.sources - Массив источников из SourceRegistry
+   * @param data.language - Язык отчёта
+   * @param data.format - Формат: narrative | bullet_list | minimal
+   * @param data.maxTokens - Лимит токенов (зависит от режима)
+   * @param data.model - Модель Claude (Haiku для simple, Sonnet для standard/deep)
+   * @param data.questionsWithTopics - Вопросы с topic-тэгами (для секционной структуры)
+   * @param data.uniqueTopicCount - Количество уникальных тем
+   * @param requestId - ID запроса для трассировки
    */
   async synthesizeReport(
     data: {
       query: string;
-      questions: Array<{ text: string; response: string }>;
-      verifiedClaims: Array<{ text: string; confidence: number; sources: string[] }>;
+      questions: string[];
+      questionsWithTopics?: Array<{ text: string; topic: string }>;
+      uniqueTopicCount?: number;
+      verifiedClaims: Array<{
+        text: string;
+        type: string;
+        confidence: number;
+        status: string;
+        sourceIds: number[];
+        value?: number;
+        unit?: string;
+      }>;
+      sources: Array<{
+        id: number;
+        url: string;
+        title: string;
+        domain: string;
+        isAvailable: boolean;
+      }>;
       language: 'ru' | 'en';
-      maxLength: 'short' | 'medium' | 'long';
+      format: 'narrative' | 'bullet_list' | 'minimal';
+      maxTokens: number;
+      model?: string;
     },
     requestId?: string
   ): Promise<{
@@ -284,45 +330,133 @@ Respond in JSON format:
     summary: string;
     usage: { input: number; output: number };
   }> {
-    const lengthGuide = {
-      short: '300-500 words',
-      medium: '800-1500 words',
-      long: '2000-3000 words',
-    };
+    const modelToUse = data.model || this.model;
 
     const langInstructions = data.language === 'ru'
       ? 'Пиши на русском языке.'
       : 'Write in English.';
 
-    const prompt = `Create a research report based on the following data.
+    // Формируем блок sources
+    const sourcesBlock = data.sources
+      .filter(s => s.isAvailable)
+      .map(s => `[src_${s.id}] ${s.title} — ${s.url}`)
+      .join('\n');
+
+    // Формируем блок verified claims
+    const claimsBlock = data.verifiedClaims
+      .map(c => {
+        const refs = c.sourceIds.map(id => `[src_${id}]`).join(' ');
+        const conf = `${(c.confidence * 100).toFixed(0)}%`;
+        const numInfo = c.value !== undefined ? ` (value: ${c.value}${c.unit ? ' ' + c.unit : ''})` : '';
+        return `- [${c.status}|${conf}] ${c.text}${numInfo} ${refs}`;
+      })
+      .join('\n');
+
+    // Определяем инструкции по формату
+    let formatInstructions = '';
+    if (data.format === 'narrative') {
+      formatInstructions = data.language === 'ru'
+        ? 'Пиши развёрнутый аналитический текст с абзацами, подзаголовками и логичной структурой. Каждый факт должен иметь ссылку на источник [src_N].'
+        : 'Write a detailed analytical text with paragraphs, subheadings and logical structure. Every fact must cite its source [src_N].';
+    } else if (data.format === 'bullet_list') {
+      formatInstructions = data.language === 'ru'
+        ? 'Структурируй ответ в виде списка ключевых фактов с пояснениями. Каждый пункт — один верифицированный факт со ссылкой [src_N].'
+        : 'Structure the response as a list of key facts with explanations. Each point — one verified fact with source reference [src_N].';
+    } else {
+      formatInstructions = data.language === 'ru'
+        ? 'Дай краткий сжатый ответ, только ключевые факты со ссылками [src_N]. Без лишних вступлений.'
+        : 'Give a brief, concise answer with only key facts and source references [src_N]. No unnecessary introductions.';
+    }
+
+    // Topic-секции
+    const topicCount = data.uniqueTopicCount || 0;
+    let topicInstructions = '';
+    if (topicCount >= 3 && data.format === 'narrative') {
+      topicInstructions = data.language === 'ru'
+        ? `\n\nСТРУКТУРА ПО ТЕМАМ:\nВопросы сгруппированы по ${topicCount} темам. Организуй отчёт по секциям с заголовками по темам.\nОбъединяй похожие темы, если это улучшает читаемость.`
+        : `\n\nTOPIC STRUCTURE:\nQuestions are grouped into ${topicCount} topics. Organize the report with section headings by topic.\nMerge similar topics if it improves readability.`;
+    } else if (topicCount >= 3 && data.format === 'bullet_list') {
+      topicInstructions = data.language === 'ru'
+        ? '\n\nГруппируй факты по темам, если их больше 5.'
+        : '\n\nGroup facts by topic if there are more than 5.';
+    }
+
+    // Структурные инструкции по формату
+    let reportStructureGuide = '';
+    if (data.format === 'narrative') {
+      reportStructureGuide = data.language === 'ru'
+        ? `\n\nРУКОВОДСТВО ПО СТРУКТУРЕ:\n- Начни с краткого вводного абзаца (2-3 предложения)\n- Каждая секция должна иметь чёткий заголовок\n- Заверши ключевыми выводами`
+        : `\n\nREPORT STRUCTURE GUIDELINES:\n- Start with a brief summary paragraph (2-3 sentences)\n- Each section should have a clear heading\n- End with key takeaways or conclusions`;
+    } else if (data.format === 'bullet_list') {
+      reportStructureGuide = data.language === 'ru'
+        ? `\n\nРУКОВОДСТВО ПО СТРУКТУРЕ:\n- Пронумеруй каждый верифицированный факт\n- После каждого факта укажи ссылку [src_N]`
+        : `\n\nREPORT STRUCTURE GUIDELINES:\n- Number each verified fact\n- Include [src_N] reference after each fact`;
+    } else {
+      reportStructureGuide = data.language === 'ru'
+        ? `\n\nРУКОВОДСТВО ПО СТРУКТУРЕ:\n- Перечисли только верифицированные факты\n- Укажи, что информация ограничена\n- Предложи использовать более глубокий режим исследования`
+        : `\n\nREPORT STRUCTURE GUIDELINES:\n- List only the facts that were verified\n- Be explicit that information is limited\n- Suggest using a deeper research mode`;
+    }
+
+    const systemPrompt = `You are a research report synthesizer. You MUST follow these critical constraints:
+
+CRITICAL CONSTRAINTS:
+1. Use ONLY the verified claims provided below. Do NOT add any facts, numbers, or statements not present in the claims list.
+2. Reference sources ONLY using [src_N] notation matching the provided source IDs.
+3. Do NOT invent, hallucinate, or extrapolate beyond the provided claims.
+4. If a claim has status "unverifiable" or "incorrect", do NOT include it in the report.
+5. Numerical values MUST be copied exactly as provided — do not round, convert, or approximate.
+6. If there are few verified claims, write a shorter report rather than padding with speculation.
+
+${langInstructions}
+${formatInstructions}${topicInstructions}${reportStructureGuide}`;
+
+    // Формируем questions с topic-аннотациями
+    const questionsBlock = data.questionsWithTopics && data.questionsWithTopics.length > 0
+      ? data.questionsWithTopics.map((q, i) => `${i + 1}. [${q.topic}] ${q.text}`).join('\n')
+      : data.questions.map((q, i) => `${i + 1}. ${q}`).join('\n');
+
+    const prompt = `Create a research report based on ONLY the following verified data.
 
 Original query: "${data.query}"
 
-Research questions and findings:
-${data.questions.map((q, i) => `${i + 1}. ${q.text}\n   Finding: ${q.response}`).join('\n\n')}
+Research questions investigated:
+${questionsBlock}
 
-Verified facts (include citations [N] referring to their sources):
-${data.verifiedClaims.map((c, i) => `- ${c.text} (confidence: ${(c.confidence * 100).toFixed(0)}%) [${c.sources.join(', ')}]`).join('\n')}
+VERIFIED CLAIMS (use ONLY these):
+${claimsBlock}
 
-${langInstructions}
+AVAILABLE SOURCES:
+${sourcesBlock}
 
-Target length: ${lengthGuide[data.maxLength]}
-
-Create:
-1. A comprehensive report in Markdown format with proper structure (headers, lists, etc.)
-2. A brief summary (1-3 paragraphs)
+Requirements:
+- Include ONLY claims with status "verified" or "partially_correct"
+- Every factual statement must have at least one [src_N] reference
+- Use Markdown formatting (headers, lists, bold for key terms)
+- Write a "summary" (1-2 paragraphs) and a full "report"
 
 Respond in JSON format:
 {
-  "report": "full markdown report",
-  "summary": "brief summary"
+  "report": "full markdown report with [src_N] references",
+  "summary": "brief summary (1-2 paragraphs)"
 }`;
 
     const result = await this.completeJson<{ report: string; summary: string }>(prompt, {
-      temperature: 0.4,
-      maxTokens: 8000,
+      systemPrompt,
+      temperature: 0.3,
+      maxTokens: data.maxTokens,
       requestId,
       defaultValue: { report: '', summary: '' },
+      model: modelToUse,
+    });
+
+    logger.info('Report synthesized (Source Masking)', {
+      request_id: requestId,
+      model: modelToUse,
+      format: data.format,
+      claims_provided: data.verifiedClaims.length,
+      sources_provided: data.sources.filter(s => s.isAvailable).length,
+      report_length: (result.data.report || '').length,
+      topic_count: data.uniqueTopicCount || 0,
     });
 
     return {

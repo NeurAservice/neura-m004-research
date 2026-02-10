@@ -65,7 +65,12 @@ interface PerplexityResponse {
     };
     finish_reason: string;
   }>;
-  citations?: PerplexityCitation[];
+  citations?: Array<PerplexityCitation | string>;
+  search_results?: Array<{
+    title: string;
+    url: string;
+    date?: string;
+  }>;
   usage: PerplexityUsage;
 }
 
@@ -107,6 +112,7 @@ export class PerplexityService {
   ): Promise<{
     content: string;
     citations: Citation[];
+    searchResults: Array<{ title: string; url: string; date?: string }>;
     usage: {
       input: number;
       output: number;
@@ -199,20 +205,51 @@ export class PerplexityService {
       const duration = Date.now() - startTime;
       const content = response.choices[0]?.message?.content || '';
 
-      // Преобразуем citations
-      const citations: Citation[] = (response.citations || []).map((c, index) => {
-        const domain = this.extractDomain(c.url);
-        const authorityScore = getAuthorityScore(c.url);
+      // Преобразуем citations (Perplexity может вернуть строки ИЛИ объекты)
+      const rawCitations = response.citations || [];
+      const citations: Citation[] = [];
+      for (let index = 0; index < rawCitations.length; index++) {
+        const c = rawCitations[index] as any;
+        // Если citation — строка (URL), конвертируем в объект
+        const url = typeof c === 'string' ? c : c?.url;
+        if (!url) {
+          logger.debug('Citation without URL', {
+            request_id: requestId,
+            index,
+            citation_type: typeof c,
+          });
+          continue;
+        }
 
-        return {
-          url: c.url,
-          title: c.title || `Source ${index + 1}`,
-          snippet: c.snippet || '',
+        const domain = this.extractDomain(url);
+        const authorityScore = getAuthorityScore(url);
+
+        citations.push({
+          url,
+          title: typeof c === 'string' ? `Source ${index + 1}` : (c.title || `Source ${index + 1}`),
+          snippet: typeof c === 'string' ? '' : (c.snippet || ''),
           domain,
           authorityScore,
-          date: c.published_date,
-        };
-      });
+          date: typeof c === 'string' ? undefined : c.published_date,
+        });
+      }
+
+      // Извлекаем search_results
+      const searchResults: Array<{ title: string; url: string; date?: string }> =
+        (response.search_results || []).map(sr => ({
+          title: sr.title,
+          url: sr.url,
+          date: sr.date,
+        }));
+
+      // Предупреждение если контент есть, а citations нет
+      if (content && citations.length === 0) {
+        logger.warn('Perplexity returned content without citations', {
+          request_id: requestId,
+          content_length: content.length,
+          query_length: query.length,
+        });
+      }
 
       // Оценка search context tokens на основе search_context_size
       // Low: ~2500 tokens, Medium: ~5000 tokens, High: ~10000 tokens per request
@@ -243,6 +280,7 @@ export class PerplexityService {
       return {
         content,
         citations,
+        searchResults,
         usage: {
           input: response.usage.prompt_tokens,
           output: response.usage.completion_tokens,

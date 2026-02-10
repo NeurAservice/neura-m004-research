@@ -128,6 +128,7 @@
             <span class="phase-badge" data-phase="research" data-i18n="phases.research">Поиск</span>
             <span class="phase-badge" data-phase="verification" data-i18n="phases.verification">Проверка</span>
             <span class="phase-badge" data-phase="output" data-i18n="phases.output">Отчёт</span>
+            <span class="phase-badge" data-phase="quality_check" data-i18n="phases.qualityCheck">Контроль</span>
           </div>
 
           <div class="progress-container">
@@ -161,6 +162,7 @@
             <div class="result-header">
               <h2 data-i18n="result.title">Результат исследования</h2>
               <div style="display: flex; align-items: center; gap: 1rem;">
+                <span id="grade-badge" class="grade-badge"></span>
                 <span id="quality-badge" class="quality-badge"></span>
                 <div class="btn-group">
                   <a id="export-md" href="#" class="btn btn-secondary btn-sm" download data-i18n="result.exportMarkdown">Markdown</a>
@@ -170,6 +172,7 @@
             </div>
           </div>
           <div class="card-body">
+            <div id="grade-warnings"></div>
             <div id="report-content" class="report-content"></div>
 
             <div class="sources-section">

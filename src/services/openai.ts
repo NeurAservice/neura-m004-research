@@ -291,6 +291,28 @@ export class OpenAIService {
   }
 
   /**
+   * Выполняет faithfulness check через GPT-4.1-mini (Quality Gate)
+   * @param prompt - Промпт faithfulness check
+   * @param requestId - ID запроса для логирования
+   * @returns Текстовый ответ (JSON) и usage
+   */
+  async faithfulnessCheck(
+    prompt: string,
+    requestId?: string
+  ): Promise<{
+    content: string;
+    usage: { input: number; output: number };
+  }> {
+    return this.complete(prompt, {
+      model: config.qualityGateModel,
+      instructions: 'You are a fact-checking assistant. Respond ONLY with valid JSON. No explanations, no markdown.',
+      temperature: 0.0,
+      maxTokens: config.qualityGateMaxTokens,
+      requestId,
+    });
+  }
+
+  /**
    * Извлекает текст из Responses API response
    */
   private extractOutputText(response: OpenAIResponsesResponse): string {

@@ -77,6 +77,7 @@ For each question, specify:
 - type: "factual" (concrete facts), "analytical" (comparisons/trends), "speculative" (predictions)
 - priority: 1 (highest) to 3 (lowest)
 - expectedFactTypes: what kind of facts to look for
+- topic: a short topic tag (1-3 words) that categorizes the question thematically. Use the same topic for related questions.
 
 Respond in JSON:
 {
@@ -86,7 +87,8 @@ Respond in JSON:
       "text": "specific question",
       "type": "factual" | "analytical" | "speculative",
       "priority": 1-3,
-      "expectedFactTypes": ["dates", "numbers", "events", etc.]
+      "expectedFactTypes": ["dates", "numbers", "events", etc.],
+      "topic": "Short Topic Tag"
     }
   ],
   "scope": "brief description of research scope",
@@ -100,6 +102,7 @@ Respond in JSON:
       type: string;
       priority: number;
       expectedFactTypes: string[];
+      topic?: string;
     }>;
     scope: string;
     factTypes: string[];
@@ -108,7 +111,7 @@ Respond in JSON:
     maxTokens,
     requestId,
     defaultValue: {
-      questions: [{ id: 1, text: query, type: 'factual', priority: 1, expectedFactTypes: ['facts'] }],
+      questions: [{ id: 1, text: query, type: 'factual', priority: 1, expectedFactTypes: ['facts'], topic: 'General' }],
       scope: 'General research',
       factTypes: ['facts'],
     },
@@ -128,6 +131,7 @@ Respond in JSON:
       type: (['factual', 'analytical', 'speculative'].includes(q.type) ? q.type : 'factual') as 'factual' | 'analytical' | 'speculative',
       priority: Math.max(1, Math.min(3, q.priority || 1)),
       expectedFactTypes: q.expectedFactTypes || ['facts'],
+      topic: q.topic || 'General',
     }));
 
   // Если нет вопросов, создаём один по умолчанию
@@ -138,6 +142,7 @@ Respond in JSON:
       type: 'factual',
       priority: 1,
       expectedFactTypes: ['facts'],
+      topic: 'General',
     });
   }
 

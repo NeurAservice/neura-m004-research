@@ -158,3 +158,47 @@ export function average(numbers: number[]): number {
 export function round(value: number, decimals: number = 2): number {
   return Math.round(value * Math.pow(10, decimals)) / Math.pow(10, decimals);
 }
+
+/**
+ * Извлекает все числа из текста (исключая годы 1900-2099, нумерацию списков, src_N)
+ * @returns массив найденных чисел с позицией в тексте
+ */
+export function extractNumbersFromText(text: string): Array<{
+  value: number;
+  raw: string;
+  position: number;
+}> {
+  const results: Array<{ value: number; raw: string; position: number }> = [];
+
+  // Паттерн для чисел: целые и дробные, с возможными %, $, M, B, K суффиксами
+  const numberPattern = /(?<!\[src_)(?<!\[)(?:[$€£¥]?\s*)?(\d[\d,]*\.?\d*)\s*(%|[MBKTkmbgt](?:illion|rillion)?|процент(?:ов)?)?/gi;
+
+  let match: RegExpExecArray | null;
+  while ((match = numberPattern.exec(text)) !== null) {
+    const raw = match[0].trim();
+    const numStr = match[1].replace(/,/g, '');
+    const value = parseFloat(numStr);
+
+    if (isNaN(value)) continue;
+
+    // Исключаем годы (1900-2099)
+    if (value >= 1900 && value <= 2099 && !match[2]) continue;
+
+    // Исключаем нумерацию списков (1. 2. 3.)
+    const beforeChar = text[match.index - 1];
+    const afterStr = text.substring(match.index + match[0].length, match.index + match[0].length + 2);
+    if (afterStr.startsWith('.') && value < 100 && value === Math.floor(value) && (beforeChar === '\n' || beforeChar === undefined || match.index === 0)) continue;
+
+    // Исключаем src_N
+    const before5 = text.substring(Math.max(0, match.index - 5), match.index);
+    if (before5.includes('src_') || before5.includes('[src_')) continue;
+
+    results.push({
+      value,
+      raw,
+      position: match.index,
+    });
+  }
+
+  return results;
+}

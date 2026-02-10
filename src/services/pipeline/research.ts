@@ -1,18 +1,20 @@
 /**
  * @file src/services/pipeline/research.ts
- * @description Phase 3: Research — сбор информации с адаптивным поведением
- * @context search_context_size по режиму, budget check перед каждым вопросом, адаптивная concurrency
- * @dependencies services/perplexity.ts, services/budget.ts
+ * @description Phase 3: Research — сбор информации с адаптивным поведением и SourceRegistry
+ * @context search_context_size по режиму, budget check перед каждым вопросом, адаптивная concurrency.
+ *          Каждый ответ Perplexity регистрируется в SourceRegistry с дедупликацией.
+ *          domainFilter убран (Perplexity сам обрабатывает домены).
+ * @dependencies services/perplexity.ts, services/budget.ts, services/sourceRegistry.ts
  * @affects Качество и стоимость собранной информации
  */
 
 import config from '../../config';
 import { getPerplexityService } from '../perplexity';
 import { TokenBudgetManager, BudgetAction } from '../budget';
+import { SourceRegistry } from '../sourceRegistry';
 import { logger } from '../../utils/logger';
 import { containsCurrentIndicators } from '../../utils/helpers';
 import { getResearchPrompt } from '../../config/prompts';
-import { getResearchDenylist } from '../../config/domains';
 import {
   ResearchQuestion,
   ResearchQuestionResult,
@@ -39,6 +41,7 @@ function reduceContextSize(current: 'low' | 'medium' | 'high'): 'low' | 'medium'
  * @param questions - Research-вопросы из planning
  * @param options - Опции исследования
  * @param mode - Режим (simple/standard/deep)
+ * @param sourceRegistry - Реестр источников для регистрации citations
  * @param requestId - ID запроса
  * @param budget - Менеджер бюджета (опционально)
  * @param onProgress - Callback прогресса
@@ -48,6 +51,7 @@ export async function executeResearch(
   questions: ResearchQuestion[],
   options: ResearchOptions,
   mode: ResearchMode,
+  sourceRegistry: SourceRegistry,
   requestId?: string,
   budget?: TokenBudgetManager,
   onProgress?: (questionId: number, total: number, status: string) => void
@@ -62,9 +66,6 @@ export async function executeResearch(
 
   // Anti-hallucination промпт
   const systemPrompt = getResearchPrompt(options.language);
-
-  // Denylist для исключения низкокачественных источников
-  const domainDenylist = getResearchDenylist();
 
   // Размер контекста по режиму
   let contextSize = CONTEXT_SIZE_BY_MODE[mode];
@@ -117,7 +118,6 @@ export async function executeResearch(
           systemPrompt,
           recencyFilter,
           requestId,
-          domainFilter: domainDenylist,
           contextSize,
           maxTokens,
         });
@@ -131,12 +131,34 @@ export async function executeResearch(
           result.usage.totalCost
         );
 
+        // Регистрируем sources в SourceRegistry
+        const citationMapping = sourceRegistry.addFromPerplexityResponse(
+          result.citations.map(c => ({
+            url: c.url,
+            title: c.title,
+            domain: c.domain,
+            date: c.date,
+          })),
+          result.searchResults?.map(sr => ({
+            url: sr.url,
+            title: sr.title,
+            date: sr.date,
+          })) || [],
+          question.id
+        );
+
+        // Определяем hasGroundedContent
+        const hasGroundedContent = result.citations.length > 0 && result.content.length > 50;
+
         completedCount++;
 
         results.push({
           questionId: question.id,
           response: result.content,
           citations: result.citations,
+          searchResults: result.searchResults,
+          citationMapping: citationMapping,
+          hasGroundedContent,
           tokensUsed: result.usage,
         });
       } catch (error) {
@@ -150,6 +172,9 @@ export async function executeResearch(
           questionId: question.id,
           response: '',
           citations: [],
+          searchResults: [],
+          citationMapping: new Map(),
+          hasGroundedContent: false,
           tokensUsed: { input: 0, output: 0, searchContextTokens: 0, totalCost: 0 },
         });
       }
@@ -177,15 +202,35 @@ export async function executeResearch(
               systemPrompt,
               recencyFilter,
               requestId,
-              domainFilter: domainDenylist,
               contextSize,
             });
+
+            // Регистрируем sources в SourceRegistry
+            const citationMapping = sourceRegistry.addFromPerplexityResponse(
+              result.citations.map(c => ({
+                url: c.url,
+                title: c.title,
+                domain: c.domain,
+                date: c.date,
+              })),
+              result.searchResults?.map(sr => ({
+                url: sr.url,
+                title: sr.title,
+                date: sr.date,
+              })) || [],
+              question.id
+            );
+
+            const hasGroundedContent = result.citations.length > 0 && result.content.length > 50;
 
             completedCount++;
             return {
               questionId: question.id,
               response: result.content,
               citations: result.citations,
+              searchResults: result.searchResults,
+              citationMapping: citationMapping,
+              hasGroundedContent,
               tokensUsed: result.usage,
             };
           } catch (error) {
@@ -199,6 +244,9 @@ export async function executeResearch(
               questionId: question.id,
               response: '',
               citations: [],
+              searchResults: [],
+              citationMapping: new Map(),
+              hasGroundedContent: false,
               tokensUsed: { input: 0, output: 0, searchContextTokens: 0, totalCost: 0 },
             };
           }
@@ -213,8 +261,9 @@ export async function executeResearch(
     questions_total: questions.length,
     questions_completed: completedCount,
     successful: results.filter(r => r.response).length,
+    grounded: results.filter(r => r.hasGroundedContent).length,
     total_citations: results.reduce((sum, r) => sum + r.citations.length, 0),
-    domain_filter_applied: domainDenylist.length,
+    registry_sources: sourceRegistry.getCount(),
     context_size: contextSize,
     budget_stopped: budgetStopped,
     mode,

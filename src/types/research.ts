@@ -14,7 +14,7 @@ export type ModeSource = 'auto' | 'user';
 export type ResearchType = 'facts_only' | 'facts_and_analysis' | 'full';
 export type ReportLength = 'short' | 'medium' | 'long';
 export type ClaimStatus = 'verified' | 'partially_correct' | 'incorrect' | 'unverifiable' | 'omitted';
-export type ClaimType = 'factual' | 'analytical' | 'speculative';
+export type ClaimType = 'factual' | 'numerical' | 'analytical' | 'speculative';
 export type ResearchStatus = 'pending' | 'in_progress' | 'clarification_needed' | 'completed' | 'failed' | 'cancelled';
 
 // ============================================
@@ -51,6 +51,8 @@ export interface TriageResult {
   estimatedQuestions: number;
   estimatedCost: { min: number; max: number };
   estimatedDuration: { min: number; max: number }; // секунды
+  preTriageFloor: ResearchMode;
+  preTriageReasons: string[];
 }
 
 // ============================================
@@ -73,6 +75,7 @@ export interface ResearchQuestion {
   type: ClaimType;
   priority: number;
   expectedFactTypes: string[];
+  topic: string;
 }
 
 export interface VerificationRequirement {
@@ -105,7 +108,10 @@ export interface ResearchQuestionResult {
   questionId: number;
   response: string;
   citations: Citation[];
+  searchResults: Array<{ title: string; url: string; date?: string }>;
+  citationMapping: Map<number, number>; // perplexityCitIndex → sourceRegistryId
   tokensUsed: { input: number; output: number; searchContextTokens: number; totalCost: number };
+  hasGroundedContent: boolean; // false если citations пустые
 }
 
 // ============================================
@@ -118,6 +124,11 @@ export interface AtomicClaim {
   type: ClaimType;
   sourceQuestionId: number;
   originalContext: string;
+  // Новые поля для numerical claims:
+  value?: number;
+  unit?: string;
+  sourceIndex?: number | null; // индекс [N] из текста Perplexity
+  sourceIds: number[]; // IDs из SourceRegistry
 }
 
 export interface VerificationResult {
@@ -142,6 +153,9 @@ export interface Claim {
   correction?: string;
   sourceIds: number[];
   omitReason?: string;
+  // Новые поля для numerical claims:
+  value?: number;
+  unit?: string;
 }
 
 export interface Source {
@@ -152,11 +166,14 @@ export interface Source {
   authority: number;
   date?: string;
   usedInClaims: number[];
+  isAvailable?: boolean;
 }
 
 export interface QualityMetrics {
   compositeScore: number;
+  grade: 'A' | 'B' | 'C' | 'F';
   verificationPassRate: number;
+  omissionRate: number;
   citationCoverage: number;
   sourceAuthorityScore: number;
   correctionRate: number;
@@ -166,7 +183,9 @@ export interface QualityMetrics {
     partiallyCorrect: number;
     unverified: number;
     omitted: number;
+    numerical: number;
   };
+  sourcesCount: number;
 }
 
 export interface UsageData {
@@ -222,6 +241,26 @@ export interface BudgetMetrics {
   degradations: string[];
 }
 
+// ============================================
+// Quality Gate (Phase 5.5)
+// ============================================
+
+export interface QualityGateResult {
+  passed: boolean;
+  faithfulnessScore: number; // 0.0 — 1.0
+  unfaithfulStatements: Array<{
+    text: string;   // Фрагмент отчёта
+    reason: string; // Почему не faithful
+  }>;
+  usage: { input: number; output: number };
+}
+
+export interface QualityGateSummary {
+  passed: boolean;
+  faithfulnessScore: number;
+  unfaithfulCount: number;
+}
+
 export interface ResearchOutput {
   report: string;
   summary: string;
@@ -232,6 +271,9 @@ export interface ResearchOutput {
   disclaimer?: string;
   partialCompletion?: PartialCompletion;
   budgetMetrics?: BudgetMetrics;
+  grade: 'A' | 'B' | 'C' | 'F';
+  warnings: string[];                     // Массив предупреждений для фронтенда
+  qualityGate: QualityGateSummary | null;  // Результат Quality Gate
 }
 
 // ============================================

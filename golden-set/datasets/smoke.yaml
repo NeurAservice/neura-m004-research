@@ -1,0 +1,445 @@
+# Smoke Test Cases для m004 Golden Set
+# 5 smoke-запросов в mode: simple с программными assertions
+# Запуск: npx promptfoo eval --config promptfooconfig.yaml
+#
+# ВАЖНО: key_claims и negative_claims передаются как pipe-separated строки
+# (не массивы!), т.к. promptfoo разворачивает массивы в отдельные test cases.
+# Внутри assertions строки парсятся через .split('|').
+
+# ============================================
+# Test 1: Технический факт (API лимиты)
+# ============================================
+- vars:
+    query: "Каковы лимиты Telegram Bot API на отправку сообщений?"
+    mode: "simple"
+    language: "ru"
+    expected_min_grade: "C"
+    expected_min_composite: 0.35
+    expected_max_cost: 0.20
+    expected_min_cost: 0.005
+    expected_min_report_length: 200
+    expected_min_sources: 1
+    key_claims: "telegram|лимит"
+    negative_claims: "1000 сообщений в секунду"
+  assert:
+    # 1. Грейд не ниже порога
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const gradeOrder = { 'A': 4, 'B': 3, 'C': 2, 'F': 1 };
+        const actual = gradeOrder[resp.result?.grade] || 0;
+        const min = gradeOrder[context.vars.expected_min_grade] || 2;
+        return { pass: actual >= min, score: actual / 4, reason: `Grade: ${resp.result?.grade}, expected >= ${context.vars.expected_min_grade}` };
+    # 2. CompositeScore выше порога
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const score = resp.result?.quality?.compositeScore || 0;
+        const min = context.vars.expected_min_composite || 0.35;
+        return { pass: score >= min, score, reason: `compositeScore: ${score.toFixed(3)}, expected >= ${min}` };
+    # 3. Стоимость в пределах
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const cost = resp.usage?.estimated_cost_usd || 0;
+        const min = context.vars.expected_min_cost || 0.005;
+        const max = context.vars.expected_max_cost || 0.20;
+        return { pass: cost >= min && cost <= max, score: cost <= max ? 1 : 0, reason: `Cost: $${cost.toFixed(4)}, expected $${min}–$${max}` };
+    # 4. Отчёт не пустой
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const len = resp.result?.report?.length || 0;
+        const min = context.vars.expected_min_report_length || 200;
+        return { pass: len >= min, score: Math.min(len / min, 1), reason: `Report length: ${len} chars, expected >= ${min}` };
+    # 5. Источники есть
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const count = resp.result?.sources?.length || 0;
+        const min = context.vars.expected_min_sources || 1;
+        return { pass: count >= min, score: Math.min(count / 5, 1), reason: `Sources: ${count}, expected >= ${min}` };
+    # 6. Не все claims omitted
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const claims = resp.result?.claims || [];
+        if (claims.length === 0) return { pass: true, score: 0.5, reason: 'No claims array (simplified mode)' };
+        const omitted = claims.filter(c => c.status === 'omitted').length;
+        const pass = omitted < claims.length;
+        return { pass, score: 1 - (omitted / claims.length), reason: `Claims: ${claims.length} total, ${omitted} omitted` };
+    # 7. Key claims presence (pipe-separated string)
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const report = (resp.result?.report || '').toLowerCase();
+        const rawClaims = String(context.vars.key_claims || '');
+        const keyClaims = rawClaims.split('|').map(s => s.trim()).filter(Boolean);
+        if (keyClaims.length === 0) return { pass: true, score: 1, reason: 'No key claims to check' };
+        const found = [];
+        const missing = [];
+        for (const claim of keyClaims) {
+          if (report.includes(claim.toLowerCase())) {
+            found.push(claim);
+          } else {
+            missing.push(claim);
+          }
+        }
+        const pass = missing.length === 0;
+        const score = found.length / keyClaims.length;
+        return { pass, score, reason: pass ? `All ${found.length} key claims found` : `Missing: ${missing.join(', ')}` };
+    # 8. Negative claims absence (pipe-separated string)
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const report = (resp.result?.report || '').toLowerCase();
+        const rawNeg = String(context.vars.negative_claims || '');
+        const negativeClaims = rawNeg.split('|').map(s => s.trim()).filter(Boolean);
+        if (negativeClaims.length === 0) return { pass: true, score: 1, reason: 'No negative claims to check' };
+        const foundNeg = negativeClaims.filter(c => report.includes(c.toLowerCase()));
+        const pass = foundNeg.length === 0;
+        return { pass, score: pass ? 1 : 0, reason: pass ? 'No hallucinations detected' : `Found forbidden claims: ${foundNeg.join(', ')}` };
+
+# ============================================
+# Test 2: Историческая дата
+# ============================================
+- vars:
+    query: "Когда был создан протокол HTTP и какие основные версии существуют?"
+    mode: "simple"
+    language: "ru"
+    expected_min_grade: "C"
+    expected_min_composite: 0.35
+    expected_max_cost: 0.20
+    expected_min_cost: 0.005
+    expected_min_report_length: 200
+    expected_min_sources: 1
+    key_claims: "http"
+    negative_claims: ""
+  assert:
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const gradeOrder = { 'A': 4, 'B': 3, 'C': 2, 'F': 1 };
+        const actual = gradeOrder[resp.result?.grade] || 0;
+        const min = gradeOrder[context.vars.expected_min_grade] || 2;
+        return { pass: actual >= min, score: actual / 4, reason: `Grade: ${resp.result?.grade}, expected >= ${context.vars.expected_min_grade}` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const score = resp.result?.quality?.compositeScore || 0;
+        const min = context.vars.expected_min_composite || 0.35;
+        return { pass: score >= min, score, reason: `compositeScore: ${score.toFixed(3)}, expected >= ${min}` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const cost = resp.usage?.estimated_cost_usd || 0;
+        const min = context.vars.expected_min_cost || 0.005;
+        const max = context.vars.expected_max_cost || 0.20;
+        return { pass: cost >= min && cost <= max, score: cost <= max ? 1 : 0, reason: `Cost: $${cost.toFixed(4)}, expected $${min}–$${max}` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const len = resp.result?.report?.length || 0;
+        const min = context.vars.expected_min_report_length || 200;
+        return { pass: len >= min, score: Math.min(len / min, 1), reason: `Report length: ${len} chars, expected >= ${min}` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const count = resp.result?.sources?.length || 0;
+        const min = context.vars.expected_min_sources || 1;
+        return { pass: count >= min, score: Math.min(count / 5, 1), reason: `Sources: ${count}, expected >= ${min}` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const claims = resp.result?.claims || [];
+        if (claims.length === 0) return { pass: true, score: 0.5, reason: 'No claims array (simplified mode)' };
+        const omitted = claims.filter(c => c.status === 'omitted').length;
+        const pass = omitted < claims.length;
+        return { pass, score: 1 - (omitted / claims.length), reason: `Claims: ${claims.length} total, ${omitted} omitted` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const report = (resp.result?.report || '').toLowerCase();
+        const rawClaims = String(context.vars.key_claims || '');
+        const keyClaims = rawClaims.split('|').map(s => s.trim()).filter(Boolean);
+        if (keyClaims.length === 0) return { pass: true, score: 1, reason: 'No key claims to check' };
+        const found = [];
+        const missing = [];
+        for (const claim of keyClaims) {
+          if (report.includes(claim.toLowerCase())) {
+            found.push(claim);
+          } else {
+            missing.push(claim);
+          }
+        }
+        const pass = missing.length === 0;
+        const score = found.length / keyClaims.length;
+        return { pass, score, reason: pass ? `All ${found.length} key claims found` : `Missing: ${missing.join(', ')}` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const report = (resp.result?.report || '').toLowerCase();
+        const rawNeg = String(context.vars.negative_claims || '');
+        const negativeClaims = rawNeg.split('|').map(s => s.trim()).filter(Boolean);
+        if (negativeClaims.length === 0) return { pass: true, score: 1, reason: 'No negative claims to check' };
+        const foundNeg = negativeClaims.filter(c => report.includes(c.toLowerCase()));
+        const pass = foundNeg.length === 0;
+        return { pass, score: pass ? 1 : 0, reason: pass ? 'No hallucinations detected' : `Found forbidden claims: ${foundNeg.join(', ')}` };
+
+# ============================================
+# Test 3: Определение технологии
+# ============================================
+- vars:
+    query: "Что такое WebAssembly и какие у него основные характеристики?"
+    mode: "simple"
+    language: "ru"
+    expected_min_grade: "C"
+    expected_min_composite: 0.35
+    expected_max_cost: 0.20
+    expected_min_cost: 0.005
+    expected_min_report_length: 200
+    expected_min_sources: 1
+    key_claims: "webassembly"
+    negative_claims: ""
+  assert:
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const gradeOrder = { 'A': 4, 'B': 3, 'C': 2, 'F': 1 };
+        const actual = gradeOrder[resp.result?.grade] || 0;
+        const min = gradeOrder[context.vars.expected_min_grade] || 2;
+        return { pass: actual >= min, score: actual / 4, reason: `Grade: ${resp.result?.grade}, expected >= ${context.vars.expected_min_grade}` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const score = resp.result?.quality?.compositeScore || 0;
+        const min = context.vars.expected_min_composite || 0.35;
+        return { pass: score >= min, score, reason: `compositeScore: ${score.toFixed(3)}, expected >= ${min}` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const cost = resp.usage?.estimated_cost_usd || 0;
+        const min = context.vars.expected_min_cost || 0.005;
+        const max = context.vars.expected_max_cost || 0.20;
+        return { pass: cost >= min && cost <= max, score: cost <= max ? 1 : 0, reason: `Cost: $${cost.toFixed(4)}, expected $${min}–$${max}` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const len = resp.result?.report?.length || 0;
+        const min = context.vars.expected_min_report_length || 200;
+        return { pass: len >= min, score: Math.min(len / min, 1), reason: `Report length: ${len} chars, expected >= ${min}` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const count = resp.result?.sources?.length || 0;
+        const min = context.vars.expected_min_sources || 1;
+        return { pass: count >= min, score: Math.min(count / 5, 1), reason: `Sources: ${count}, expected >= ${min}` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const claims = resp.result?.claims || [];
+        if (claims.length === 0) return { pass: true, score: 0.5, reason: 'No claims array (simplified mode)' };
+        const omitted = claims.filter(c => c.status === 'omitted').length;
+        const pass = omitted < claims.length;
+        return { pass, score: 1 - (omitted / claims.length), reason: `Claims: ${claims.length} total, ${omitted} omitted` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const report = (resp.result?.report || '').toLowerCase();
+        const rawClaims = String(context.vars.key_claims || '');
+        const keyClaims = rawClaims.split('|').map(s => s.trim()).filter(Boolean);
+        if (keyClaims.length === 0) return { pass: true, score: 1, reason: 'No key claims to check' };
+        const found = [];
+        const missing = [];
+        for (const claim of keyClaims) {
+          if (report.includes(claim.toLowerCase())) {
+            found.push(claim);
+          } else {
+            missing.push(claim);
+          }
+        }
+        const pass = missing.length === 0;
+        const score = found.length / keyClaims.length;
+        return { pass, score, reason: pass ? `All ${found.length} key claims found` : `Missing: ${missing.join(', ')}` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const report = (resp.result?.report || '').toLowerCase();
+        const rawNeg = String(context.vars.negative_claims || '');
+        const negativeClaims = rawNeg.split('|').map(s => s.trim()).filter(Boolean);
+        if (negativeClaims.length === 0) return { pass: true, score: 1, reason: 'No negative claims to check' };
+        const foundNeg = negativeClaims.filter(c => report.includes(c.toLowerCase()));
+        const pass = foundNeg.length === 0;
+        return { pass, score: pass ? 1 : 0, reason: pass ? 'No hallucinations detected' : `Found forbidden claims: ${foundNeg.join(', ')}` };
+
+# ============================================
+# Test 4: Числовой факт (AI модели)
+# ============================================
+- vars:
+    query: "Какие лимиты токенов и стоимость у моделей Claude Sonnet 4 и GPT-4.1?"
+    mode: "simple"
+    language: "ru"
+    expected_min_grade: "C"
+    expected_min_composite: 0.35
+    expected_max_cost: 0.20
+    expected_min_cost: 0.005
+    expected_min_report_length: 200
+    expected_min_sources: 1
+    key_claims: "claude|gpt"
+    negative_claims: ""
+  assert:
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const gradeOrder = { 'A': 4, 'B': 3, 'C': 2, 'F': 1 };
+        const actual = gradeOrder[resp.result?.grade] || 0;
+        const min = gradeOrder[context.vars.expected_min_grade] || 2;
+        return { pass: actual >= min, score: actual / 4, reason: `Grade: ${resp.result?.grade}, expected >= ${context.vars.expected_min_grade}` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const score = resp.result?.quality?.compositeScore || 0;
+        const min = context.vars.expected_min_composite || 0.35;
+        return { pass: score >= min, score, reason: `compositeScore: ${score.toFixed(3)}, expected >= ${min}` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const cost = resp.usage?.estimated_cost_usd || 0;
+        const min = context.vars.expected_min_cost || 0.005;
+        const max = context.vars.expected_max_cost || 0.20;
+        return { pass: cost >= min && cost <= max, score: cost <= max ? 1 : 0, reason: `Cost: $${cost.toFixed(4)}, expected $${min}–$${max}` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const len = resp.result?.report?.length || 0;
+        const min = context.vars.expected_min_report_length || 200;
+        return { pass: len >= min, score: Math.min(len / min, 1), reason: `Report length: ${len} chars, expected >= ${min}` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const count = resp.result?.sources?.length || 0;
+        const min = context.vars.expected_min_sources || 1;
+        return { pass: count >= min, score: Math.min(count / 5, 1), reason: `Sources: ${count}, expected >= ${min}` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const claims = resp.result?.claims || [];
+        if (claims.length === 0) return { pass: true, score: 0.5, reason: 'No claims array (simplified mode)' };
+        const omitted = claims.filter(c => c.status === 'omitted').length;
+        const pass = omitted < claims.length;
+        return { pass, score: 1 - (omitted / claims.length), reason: `Claims: ${claims.length} total, ${omitted} omitted` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const report = (resp.result?.report || '').toLowerCase();
+        const rawClaims = String(context.vars.key_claims || '');
+        const keyClaims = rawClaims.split('|').map(s => s.trim()).filter(Boolean);
+        if (keyClaims.length === 0) return { pass: true, score: 1, reason: 'No key claims to check' };
+        const found = [];
+        const missing = [];
+        for (const claim of keyClaims) {
+          if (report.includes(claim.toLowerCase())) {
+            found.push(claim);
+          } else {
+            missing.push(claim);
+          }
+        }
+        const pass = missing.length === 0;
+        const score = found.length / keyClaims.length;
+        return { pass, score, reason: pass ? `All ${found.length} key claims found` : `Missing: ${missing.join(', ')}` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const report = (resp.result?.report || '').toLowerCase();
+        const rawNeg = String(context.vars.negative_claims || '');
+        const negativeClaims = rawNeg.split('|').map(s => s.trim()).filter(Boolean);
+        if (negativeClaims.length === 0) return { pass: true, score: 1, reason: 'No negative claims to check' };
+        const foundNeg = negativeClaims.filter(c => report.includes(c.toLowerCase()));
+        const pass = foundNeg.length === 0;
+        return { pass, score: pass ? 1 : 0, reason: pass ? 'No hallucinations detected' : `Found forbidden claims: ${foundNeg.join(', ')}` };
+
+# ============================================
+# Test 5: Сравнение (en)
+# ============================================
+- vars:
+    query: "Compare REST and GraphQL: key differences, pros and cons"
+    mode: "simple"
+    language: "en"
+    expected_min_grade: "C"
+    expected_min_composite: 0.35
+    expected_max_cost: 0.20
+    expected_min_cost: 0.005
+    expected_min_report_length: 200
+    expected_min_sources: 1
+    key_claims: "rest|graphql"
+    negative_claims: ""
+  assert:
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const gradeOrder = { 'A': 4, 'B': 3, 'C': 2, 'F': 1 };
+        const actual = gradeOrder[resp.result?.grade] || 0;
+        const min = gradeOrder[context.vars.expected_min_grade] || 2;
+        return { pass: actual >= min, score: actual / 4, reason: `Grade: ${resp.result?.grade}, expected >= ${context.vars.expected_min_grade}` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const score = resp.result?.quality?.compositeScore || 0;
+        const min = context.vars.expected_min_composite || 0.35;
+        return { pass: score >= min, score, reason: `compositeScore: ${score.toFixed(3)}, expected >= ${min}` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const cost = resp.usage?.estimated_cost_usd || 0;
+        const min = context.vars.expected_min_cost || 0.005;
+        const max = context.vars.expected_max_cost || 0.20;
+        return { pass: cost >= min && cost <= max, score: cost <= max ? 1 : 0, reason: `Cost: $${cost.toFixed(4)}, expected $${min}–$${max}` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const len = resp.result?.report?.length || 0;
+        const min = context.vars.expected_min_report_length || 200;
+        return { pass: len >= min, score: Math.min(len / min, 1), reason: `Report length: ${len} chars, expected >= ${min}` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const count = resp.result?.sources?.length || 0;
+        const min = context.vars.expected_min_sources || 1;
+        return { pass: count >= min, score: Math.min(count / 5, 1), reason: `Sources: ${count}, expected >= ${min}` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const claims = resp.result?.claims || [];
+        if (claims.length === 0) return { pass: true, score: 0.5, reason: 'No claims array (simplified mode)' };
+        const omitted = claims.filter(c => c.status === 'omitted').length;
+        const pass = omitted < claims.length;
+        return { pass, score: 1 - (omitted / claims.length), reason: `Claims: ${claims.length} total, ${omitted} omitted` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const report = (resp.result?.report || '').toLowerCase();
+        const rawClaims = String(context.vars.key_claims || '');
+        const keyClaims = rawClaims.split('|').map(s => s.trim()).filter(Boolean);
+        if (keyClaims.length === 0) return { pass: true, score: 1, reason: 'No key claims to check' };
+        const found = [];
+        const missing = [];
+        for (const claim of keyClaims) {
+          if (report.includes(claim.toLowerCase())) {
+            found.push(claim);
+          } else {
+            missing.push(claim);
+          }
+        }
+        const pass = missing.length === 0;
+        const score = found.length / keyClaims.length;
+        return { pass, score, reason: pass ? `All ${found.length} key claims found` : `Missing: ${missing.join(', ')}` };
+    - type: javascript
+      value: |
+        const resp = JSON.parse(output);
+        const report = (resp.result?.report || '').toLowerCase();
+        const rawNeg = String(context.vars.negative_claims || '');
+        const negativeClaims = rawNeg.split('|').map(s => s.trim()).filter(Boolean);
+        if (negativeClaims.length === 0) return { pass: true, score: 1, reason: 'No negative claims to check' };
+        const foundNeg = negativeClaims.filter(c => report.includes(c.toLowerCase()));
+        const pass = foundNeg.length === 0;
+        return { pass, score: pass ? 1 : 0, reason: pass ? 'No hallucinations detected' : `Found forbidden claims: ${foundNeg.join(', ')}` };

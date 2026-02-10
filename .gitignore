@@ -7,3 +7,7 @@ logs/
 coverage/
 .nyc_output/
 *.tsbuildinfo
+data/
+golden-set/output/
+golden-set/.promptfoo/
+golden-set/node_modules/

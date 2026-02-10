@@ -28,7 +28,7 @@ COPY . .
 RUN npm run build
 
 # Create directories for data and logs
-RUN mkdir -p /app/data /app/logs
+RUN mkdir -p /app/data /app/data/stats /app/logs
 
 # Expose port
 EXPOSE 3004

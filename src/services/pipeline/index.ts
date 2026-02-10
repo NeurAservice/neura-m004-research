@@ -10,3 +10,4 @@ export { planResearch } from './planning';
 export { executeResearch } from './research';
 export { verifyAllClaims } from './verification';
 export { synthesizeOutput } from './output';
+export { runQualityGate, downgradeGrade } from './qualityGate';

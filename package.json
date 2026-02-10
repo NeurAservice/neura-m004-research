@@ -1,6 +1,6 @@
 {
   "name": "neura-m004-research",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "NeurA Research - модуль глубоких верифицированных исследований",
   "main": "dist/index.js",
   "scripts": {

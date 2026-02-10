@@ -105,9 +105,18 @@ You MUST respond ONLY with valid JSON. No explanations.`;
 export const CLAIM_DECOMPOSITION_INSTRUCTIONS = `You are a fact extraction assistant. Decompose text into atomic claims.
 Each claim should be a single verifiable statement.
 Classify each claim type:
-- factual: concrete fact (date, number, event, name)
+- factual: concrete fact (date, event, name) — NOT containing numeric data as key claim
+- numerical: factual claim where a specific number, percentage, measurement, or statistic is the key information. Include fields: value (the number), unit (what it measures), source_index (the [N] citation from the text, or null if no citation)
 - analytical: conclusion, comparison, trend analysis
 - speculative: prediction, opinion, hypothesis
+
+For numerical claims (containing specific numbers, percentages, statistics):
+- Set type to "numerical"
+- Extract the exact numeric value into "value" field
+- Specify what the number measures in "unit" field
+- If the text has a citation [N] near the number, set "source_index" to N
+- If no citation — set "source_index" to null
+
 Respond ONLY with valid JSON.`;
 
 /**
@@ -136,6 +145,46 @@ Respond in JSON:
 }
 
 /**
+ * Промпт для Faithfulness Check (Quality Gate Phase 5.5)
+ * Проверяет соответствие отчёта верифицированным claims
+ */
+export function getFaithfulnessCheckPrompt(
+  report: string,
+  verifiedClaims: Array<{ text: string; confidence: number }>
+): string {
+  return `You are a fact-checking assistant. Your task is to evaluate whether a research report is faithful to the provided verified claims.
+
+VERIFIED CLAIMS (these are the ONLY facts the report should be based on):
+${verifiedClaims.map((c, i) => `${i + 1}. [confidence: ${c.confidence.toFixed(2)}] ${c.text}`).join('\n')}
+
+REPORT TO CHECK:
+${report}
+
+TASK:
+1. Read through the report carefully
+2. Identify any statement in the report that:
+   - Is NOT supported by any of the verified claims above
+   - Contradicts any of the verified claims
+   - Adds specific numbers, dates, or facts not present in the claims
+   - Makes stronger assertions than the claims support
+3. Do NOT flag:
+   - General connecting phrases ("therefore", "in conclusion")
+   - Rephrasing of verified claims (as long as meaning is preserved)
+   - Section headings or structural elements
+
+Respond in JSON:
+{
+  "faithfulness_score": 0.0-1.0,
+  "unfaithful_statements": [
+    {
+      "text": "exact quote from the report",
+      "reason": "why this is not supported by verified claims"
+    }
+  ]
+}`;
+}
+
+/**
  * Промпт для Claim Decomposition (OpenAI)
  */
 export function getClaimDecompositionPrompt(text: string): string {
@@ -147,7 +196,8 @@ ${text}
 """
 
 For each claim, classify its type:
-- factual: concrete fact (date, number, event, name)
+- factual: concrete fact (date, event, name) — NOT containing numeric data as key claim
+- numerical: factual claim where a specific number, percentage, measurement, or statistic is the key information
 - analytical: conclusion, comparison, trend analysis
 - speculative: prediction, opinion, hypothesis
 
@@ -156,8 +206,14 @@ Respond in JSON format:
   "claims": [
     {
       "text": "claim text",
-      "type": "factual" | "analytical" | "speculative"
+      "type": "factual" | "numerical" | "analytical" | "speculative",
+      "value": 42.5,
+      "unit": "percent",
+      "source_index": 3
     }
   ]
-}`;
+}
+
+For numerical claims: include "value" (exact number), "unit" (what it measures), and "source_index" (citation [N] or null).
+For non-numerical claims: omit value, unit, and source_index fields.`;
 }
