@@ -59,14 +59,11 @@ jobs:
               # Cleanup old containers first
               docker compose down 2>&1 || true
 
-              # Remove old images to force fresh build
-              docker image prune -f 2>&1 || true
-
-              # Build with retry (up to 3 attempts)
+              # Build with Docker layer cache (значительно быстрее чем --no-cache)
               BUILD_SUCCESS=0
               for attempt in 1 2 3; do
                 echo \"Build attempt \$attempt/3...\"
-                if docker compose build --no-cache 2>&1; then
+                if docker compose build 2>&1; then
                   echo \"Build succeeded on attempt \$attempt\"
                   BUILD_SUCCESS=1
                   break
