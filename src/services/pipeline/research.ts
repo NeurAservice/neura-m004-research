@@ -108,7 +108,9 @@ export async function executeResearch(
         onProgress?.(
           question.id,
           questions.length,
-          `Исследуем: ${question.text.substring(0, 50)}...`
+          options.language === 'en'
+            ? `Researching (${completedCount + 1}/${questions.length}): ${question.text.substring(0, 80)}${question.text.length > 80 ? '...' : ''}`
+            : `Исследуем (${completedCount + 1}/${questions.length}): ${question.text.substring(0, 80)}${question.text.length > 80 ? '...' : ''}`
         );
 
         const result = await perplexity.search(question.text, {
@@ -166,7 +168,9 @@ export async function executeResearch(
             onProgress?.(
               question.id,
               questions.length,
-              `Исследуем: ${question.text.substring(0, 50)}...`
+              options.language === 'en'
+                ? `Researching (${completedCount + 1}/${questions.length}): ${question.text.substring(0, 80)}${question.text.length > 80 ? '...' : ''}`
+                : `Исследуем (${completedCount + 1}/${questions.length}): ${question.text.substring(0, 80)}${question.text.length > 80 ? '...' : ''}`
             );
 
             const result = await perplexity.search(question.text, {

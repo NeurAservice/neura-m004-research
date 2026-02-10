@@ -74,6 +74,7 @@
 
   <script src="js/i18n.js"></script>
   <script src="js/api.js"></script>
+  <script src="js/balance-widget.js"></script>
   <script>
     const historyPage = {
       items: [],
@@ -83,76 +84,8 @@
 
       async init() {
         await i18n.init();
-        this.bindEvents();
+        balanceWidget.init();
         await this.loadHistory();
-      },
-
-      bindEvents() {
-        // Balance widget (унифицировано с index.html)
-        const balanceToggle = document.getElementById('balance-toggle');
-        if (balanceToggle) {
-          balanceToggle.addEventListener('click', () => this.toggleBalancePopover());
-        }
-
-        const balanceClose = document.getElementById('balance-close');
-        if (balanceClose) {
-          balanceClose.addEventListener('click', () => this.closeBalancePopover());
-        }
-
-        const balanceRefresh = document.getElementById('balance-refresh');
-        if (balanceRefresh) {
-          balanceRefresh.addEventListener('click', () => this.fetchBalance());
-        }
-
-        document.addEventListener('click', (e) => {
-          const popover = document.getElementById('balance-popover');
-          const toggle = document.getElementById('balance-toggle');
-          if (popover && toggle && !popover.contains(e.target) && !toggle.contains(e.target)) {
-            this.closeBalancePopover();
-          }
-        });
-      },
-
-      toggleBalancePopover() {
-        const popover = document.getElementById('balance-popover');
-        if (popover) {
-          const isHidden = popover.hasAttribute('hidden');
-          if (isHidden) {
-            popover.removeAttribute('hidden');
-            this.fetchBalance();
-          } else {
-            popover.setAttribute('hidden', '');
-          }
-        }
-      },
-
-      closeBalancePopover() {
-        const popover = document.getElementById('balance-popover');
-        if (popover) popover.setAttribute('hidden', '');
-      },
-
-      async fetchBalance() {
-        const valueEl = document.getElementById('balance-value');
-        const topupBtn = document.getElementById('balance-topup');
-        const updatedEl = document.getElementById('balance-updated');
-
-        if (valueEl) valueEl.textContent = '...';
-
-        try {
-          const result = await api.getBalance();
-          if (result.data) {
-            if (valueEl) valueEl.textContent = result.data.balance;
-            if (topupBtn && result.data.topup_url) {
-              topupBtn.href = result.data.topup_url;
-            }
-            if (updatedEl) {
-              const now = new Date();
-              updatedEl.textContent = `${i18n.t('balance.updatedAt')} ${now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`;
-            }
-          }
-        } catch (error) {
-          if (valueEl) valueEl.textContent = i18n.t('balance.error') || 'Ошибка';
-        }
       },
 
       async loadHistory() {

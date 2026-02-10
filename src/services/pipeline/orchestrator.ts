@@ -109,7 +109,7 @@ export class ResearchOrchestrator extends EventEmitter {
       // ═══════════════════════════════════════════════════
       // Phase 0: Triage (определяет mode → создаёт бюджет)
       // ═══════════════════════════════════════════════════
-      this.emitProgress('triage', 'Анализ запроса...', 5);
+      this.emitProgress('triage', options.language === 'en' ? `Analyzing query: "${query.substring(0, 60)}${query.length > 60 ? '...' : ''}"` : `Анализ запроса: «${query.substring(0, 60)}${query.length > 60 ? '...' : ''}»`, 5);
       this.checkAborted();
 
       const triageResult = await triage(query, options, this.requestId);
@@ -125,7 +125,7 @@ export class ResearchOrchestrator extends EventEmitter {
 
       const mode: ResearchMode = triageResult.mode;
 
-      this.emitProgress('triage', 'Анализ завершён', 10, {
+      this.emitProgress('triage', options.language === 'en' ? `Analysis complete. Mode: ${mode}, type: ${triageResult.queryType}` : `Анализ завершён. Режим: ${mode}, тип: ${triageResult.queryType}`, 10, {
         queryType: triageResult.queryType,
         mode,
       });
@@ -188,7 +188,7 @@ export class ResearchOrchestrator extends EventEmitter {
         );
         this.emitProgress('clarification', 'Уточнения применены', 15);
       } else {
-        this.emitProgress('clarification', 'Проверка ясности запроса...', 12);
+        this.emitProgress('clarification', options.language === 'en' ? 'Checking query clarity...' : 'Проверка ясности запроса...', 12);
         this.checkAborted();
 
         const clarificationResult = await checkClarification(query, this.requestId);
@@ -210,13 +210,13 @@ export class ResearchOrchestrator extends EventEmitter {
 
           return this.createPendingResult(userId, query, options, 'clarification_needed');
         }
-        this.emitProgress('clarification', 'Запрос понятен', 15);
+        this.emitProgress('clarification', options.language === 'en' ? 'Query is clear, proceeding' : 'Запрос понятен, продолжаем', 15);
       }
 
       // ═══════════════════════════════════════════════════
       // Phase 2: Planning (с бюджетом)
       // ═══════════════════════════════════════════════════
-      this.emitProgress('planning', 'Планирование исследования...', 18);
+      this.emitProgress('planning', options.language === 'en' ? 'Planning research strategy...' : 'Планирование стратегии исследования...', 18);
       this.checkAborted();
 
       budget.startPhase('planning');
@@ -236,7 +236,7 @@ export class ResearchOrchestrator extends EventEmitter {
 
       const plannedQuestions = planningResult.questions.length;
 
-      this.emitProgress('planning', `Запланировано ${plannedQuestions} вопросов`, 25, {
+      this.emitProgress('planning', options.language === 'en' ? `Planned ${plannedQuestions} research questions` : `Запланировано ${plannedQuestions} исследовательских вопросов`, 25, {
         questions_count: plannedQuestions,
         mode,
       });
@@ -244,7 +244,7 @@ export class ResearchOrchestrator extends EventEmitter {
       // ═══════════════════════════════════════════════════
       // Phase 3: Research (с бюджетом и адаптивностью)
       // ═══════════════════════════════════════════════════
-      this.emitProgress('research', 'Сбор информации...', 30);
+      this.emitProgress('research', options.language === 'en' ? 'Starting information gathering...' : 'Начинаем сбор информации...', 30);
       this.checkAborted();
 
       budget.startPhase('research');
@@ -274,7 +274,7 @@ export class ResearchOrchestrator extends EventEmitter {
 
       const coveredQuestions = researchResults.filter(r => r.response && r.response.length > 0).length;
 
-      this.emitProgress('research', 'Информация собрана', 60, {
+      this.emitProgress('research', options.language === 'en' ? `Collected data: ${coveredQuestions} of ${plannedQuestions} questions covered` : `Данные собраны: ${coveredQuestions} из ${plannedQuestions} вопросов покрыто`, 60, {
         covered: coveredQuestions,
         planned: plannedQuestions,
       });
@@ -282,7 +282,7 @@ export class ResearchOrchestrator extends EventEmitter {
       // ═══════════════════════════════════════════════════
       // Phase 4: Verification (с бюджетом и деградацией)
       // ═══════════════════════════════════════════════════
-      this.emitProgress('verification', 'Верификация фактов...', 62);
+      this.emitProgress('verification', options.language === 'en' ? 'Starting fact verification...' : 'Начинаем верификацию фактов...', 62);
       this.checkAborted();
 
       budget.startPhase('verification');
@@ -308,14 +308,14 @@ export class ResearchOrchestrator extends EventEmitter {
         }
       }
 
-      this.emitProgress('verification', 'Верификация завершена', 82, {
+      this.emitProgress('verification', options.language === 'en' ? `Verification complete (level: ${verificationResults.verificationLevel})` : `Верификация завершена (уровень: ${verificationResults.verificationLevel === 'full' ? 'полная' : verificationResults.verificationLevel === 'simplified' ? 'упрощённая' : 'пропущена'})`, 82, {
         verification_level: verificationResults.verificationLevel,
       });
 
       // ═══════════════════════════════════════════════════
       // Phase 5: Output (с partial completion)
       // ═══════════════════════════════════════════════════
-      this.emitProgress('output', 'Формирование отчёта...', 85);
+      this.emitProgress('output', options.language === 'en' ? 'Generating final report...' : 'Формирование финального отчёта...', 85);
       this.checkAborted();
 
       budget.startPhase('output');
@@ -367,7 +367,7 @@ export class ResearchOrchestrator extends EventEmitter {
       // Обновляем budgetMetrics финальным snapshot (включает output costs)
       output.budgetMetrics = budget.getSnapshot();
 
-      this.emitProgress('output', 'Отчёт готов', 100);
+      this.emitProgress('output', options.language === 'en' ? 'Report ready!' : 'Отчёт готов!', 100);
 
       // ═══════════════════════════════════════════════════
       // Формируем финальный результат

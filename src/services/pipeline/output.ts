@@ -10,7 +10,6 @@ import config from '../../config';
 import { getAnthropicService } from '../anthropic';
 import { TokenBudgetManager, BudgetSnapshot } from '../budget';
 import { logger } from '../../utils/logger';
-import { getAuthorityLabel } from '../../config/authority';
 import { round, average } from '../../utils/helpers';
 import {
   ResearchOutput,
@@ -219,34 +218,20 @@ export async function synthesizeOutput(
   if (partialCompletion && partialCompletion.isPartial) {
     const lang = options.language;
     if (lang === 'ru') {
-      const verificationLabels: Record<string, string> = {
-        'full': 'полная — все факты перепроверены',
-        'simplified': 'базовая — факты проверены по одному источнику',
-        'skipped': 'не проводилась — результаты основаны только на поиске'
-      };
-      const vLevel = verificationLabels[partialCompletion.verificationLevel] || partialCompletion.verificationLevel;
-      partialNotice = `> ℹ️ **Результат с ограничениями**\n` +
-        `> Исследовано ${partialCompletion.coveredQuestions} из ${partialCompletion.plannedQuestions} запланированных аспектов темы.\n` +
-        `> Проверка фактов: ${vLevel}.\n` +
+      partialNotice = `> ℹ️ **Частичный результат**\n` +
+        `> Исследовано ${partialCompletion.coveredQuestions} из ${partialCompletion.plannedQuestions} запланированных вопросов.\n` +
+        `> Уровень верификации: ${partialCompletion.verificationLevel}.\n` +
         (partialCompletion.circuitBreakerTriggered
-          ? `> Исследование завершено досрочно из-за ограничений ресурсов.\n`
+          ? `> Бюджет ограничен (уровень: ${partialCompletion.circuitBreakerLevel}).\n`
           : '') +
-        `> Для более глубокого анализа попробуйте режим «Глубокий» или «Стандартный».\n` +
         '\n';
     } else {
-      const verificationLabels: Record<string, string> = {
-        'full': 'full — all facts cross-verified',
-        'simplified': 'basic — facts checked against single source',
-        'skipped': 'not performed — results based on search only'
-      };
-      const vLevel = verificationLabels[partialCompletion.verificationLevel] || partialCompletion.verificationLevel;
-      partialNotice = `> ℹ️ **Result with Limitations**\n` +
-        `> Researched ${partialCompletion.coveredQuestions} of ${partialCompletion.plannedQuestions} planned aspects.\n` +
-        `> Fact verification: ${vLevel}.\n` +
+      partialNotice = `> ℹ️ **Partial Result**\n` +
+        `> Researched ${partialCompletion.coveredQuestions} of ${partialCompletion.plannedQuestions} planned questions.\n` +
+        `> Verification level: ${partialCompletion.verificationLevel}.\n` +
         (partialCompletion.circuitBreakerTriggered
-          ? `> Research completed early due to resource constraints.\n`
+          ? `> Budget constrained (level: ${partialCompletion.circuitBreakerLevel}).\n`
           : '') +
-        `> For deeper analysis, try "Deep" or "Standard" mode.\n` +
         '\n';
     }
   }
@@ -365,32 +350,32 @@ function calculateQualityMetrics(
 }
 
 /**
- * Форматирует раздел источников
+ * Форматирует раздел источников на языке исследования
  */
 function formatSourcesSection(sources: Source[], language: 'ru' | 'en'): string {
   if (sources.length === 0) return '';
 
-  const header = language === 'ru' ? '## Использованные источники' : '## Sources';
+  const header = language === 'ru' ? '## Использованные источники' : '## Sources used';
   const sortedSources = [...sources].sort((a, b) => b.authority - a.authority);
 
-  /**
-   * Получить текстовый лейбл авторитетности для отчёта
-   */
-  const getAuthorityText = (score: number): string => {
-    if (language === 'ru') {
-      if (score >= 0.8) return 'Авторитетный';
-      if (score >= 0.5) return 'Надёжный';
-      return 'Непроверенный';
-    }
-    if (score >= 0.8) return 'Authoritative';
-    if (score >= 0.5) return 'Reliable';
-    return 'Unverified';
-  };
-
   const sourceLines = sortedSources.map(s => {
-    const stars = getAuthorityLabel(s.authority);
-    const label = getAuthorityText(s.authority);
-    return `[${s.id}] [${s.title}](${s.url}) — ${s.domain} ${stars} (${label})`;
+    const pct = Math.round(s.authority * 100);
+    let authorityLabel: string;
+    if (language === 'ru') {
+      if (s.authority >= 0.8) authorityLabel = 'Высокая надёжность';
+      else if (s.authority >= 0.5) authorityLabel = 'Средняя надёжность';
+      else authorityLabel = 'Требует проверки';
+    } else {
+      if (s.authority >= 0.8) authorityLabel = 'Highly reliable';
+      else if (s.authority >= 0.5) authorityLabel = 'Moderately reliable';
+      else authorityLabel = 'Needs review';
+    }
+
+    const title = (s.title && s.title !== 'Unknown source' && s.title !== 'unknown')
+      ? s.title
+      : s.domain || s.url;
+
+    return `[${s.id}] [${title}](${s.url}) — ${s.domain} (${authorityLabel}, ${pct}%)`;
   });
 
   return `${header}\n\n${sourceLines.join('\n')}`;

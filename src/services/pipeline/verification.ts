@@ -211,7 +211,9 @@ export async function verifyAllClaims(
         onProgress?.(
           verified + 1,
           factualClaims.length,
-          `Проверяем: ${claim.text.substring(0, 40)}...`
+          options.language === 'en'
+            ? `Verifying fact (${verified + 1}/${factualClaims.length}): ${claim.text.substring(0, 70)}${claim.text.length > 70 ? '...' : ''}`
+            : `Проверяем факт (${verified + 1}/${factualClaims.length}): ${claim.text.substring(0, 70)}${claim.text.length > 70 ? '...' : ''}`
         );
 
         const maxTokens = budget ? budget.getMaxTokensForCall('deepCheck') : 500;

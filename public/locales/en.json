@@ -45,6 +45,7 @@
   },
   "progress": {
     "preparing": "Preparing...",
+    "resuming": "Restoring progress... Research continues on the server.",
     "triage": "Analyzing query",
     "clarification": "Clarification",
     "planning": "Planning",

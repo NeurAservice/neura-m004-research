@@ -1,6 +1,8 @@
 /**
  * @file public/js/app.js
  * @description Основной модуль приложения NeurA Research
+ * @context Главный UI-контроллер: форма, SSE-прогресс, результат, экспорт
+ * @dependencies js/api.js, js/i18n.js, js/balance-widget.js
  */
 
 // Determine API base path from current location
@@ -18,14 +20,15 @@ const app = {
   abortController: null,
   version: 'loading...',
   userId: null,
-  topupUrl: null,
 
   async init() {
     await i18n.init();
     await this.loadModuleConfig();
     await this.initializeUser();
     this.bindEvents();
-    this.initBalanceWidget();
+    this.initTextareaAutoResize();
+    balanceWidget.init();
+    this.checkPendingResearch();
   },
 
   /**
@@ -153,141 +156,83 @@ const app = {
       });
     }
 
-    // Balance widget (Standard)
-    const balanceToggle = document.getElementById('balance-toggle');
-    if (balanceToggle) {
-      balanceToggle.addEventListener('click', () => this.toggleBalancePopover());
-    }
-
-    const balanceClose = document.getElementById('balance-close');
-    if (balanceClose) {
-      balanceClose.addEventListener('click', () => this.closeBalancePopover());
-    }
-
-    const balanceRefresh = document.getElementById('balance-refresh');
-    if (balanceRefresh) {
-      balanceRefresh.addEventListener('click', () => this.fetchBalance());
-    }
-
-    // Close popover on outside click
-    document.addEventListener('click', (e) => {
-      const popover = document.getElementById('balance-popover');
-      const toggle = document.getElementById('balance-toggle');
-      if (popover && !popover.hidden && !popover.contains(e.target) && !toggle.contains(e.target)) {
-        this.closeBalancePopover();
-      }
-    });
-
-    // Language selector - переключение языка интерфейса
+    // Language selector
     const langSelect = document.getElementById('language-select');
     if (langSelect) {
-      // Set current locale in selector
       langSelect.value = i18n.locale;
-
       langSelect.addEventListener('change', (e) => {
         i18n.setLocale(e.target.value);
       });
     }
   },
 
-  initBalanceWidget() {
-    // Initial fetch not needed - will fetch on popover open
+  /**
+   * Инициализирует авто-ресайз textarea (min текущая высота, max 500px)
+   */
+  initTextareaAutoResize() {
+    const textarea = document.getElementById('query-input');
+    if (!textarea) return;
+
+    const adjustHeight = () => {
+      textarea.style.height = 'auto';
+      const scrollHeight = textarea.scrollHeight;
+      textarea.style.height = Math.min(scrollHeight, 500) + 'px';
+    };
+
+    textarea.addEventListener('input', adjustHeight);
+    // Начальная подгонка
+    adjustHeight();
   },
 
-  toggleBalancePopover() {
-    console.log('[M004] Balance toggle clicked');
-    const popover = document.getElementById('balance-popover');
-    if (popover) {
-      const isHidden = popover.hidden;
-      console.log('[M004] Popover was hidden:', isHidden);
-      popover.hidden = !isHidden;
-      console.log('[M004] Popover now hidden:', popover.hidden);
-      if (!popover.hidden) {
-        this.fetchBalance();
-      }
-    } else {
-      console.error('[M004] Balance popover element not found!');
-    }
+  /**
+   * Проверяет наличие незавершённого исследования и восстанавливает прогресс
+   */
+  checkPendingResearch() {
+    const pendingId = localStorage.getItem('m004_pending_research');
+    if (!pendingId) return;
+
+    // Проверяем статус на сервере
+    this.pollResearchStatus(pendingId);
   },
 
-  closeBalancePopover() {
-    const popover = document.getElementById('balance-popover');
-    if (popover) {
-      popover.hidden = true;
-    }
-  },
+  /**
+   * Периодически проверяет статус исследования (при обновлении страницы)
+   */
+  async pollResearchStatus(researchId) {
+    this.currentResearchId = researchId;
+    this.showProgressUI();
+    this.updateProgress(50, i18n.t('progress.resuming') || 'Восстановление прогресса...');
 
-  async fetchBalance() {
-    console.log('[M004] Fetching balance...');
-    const valueEl = document.getElementById('balance-value');
-    const updatedEl = document.getElementById('balance-updated');
-    const topupBtn = document.getElementById('balance-topup');
-
-    if (valueEl) {
-      valueEl.textContent = '...';
-    }
-
-    try {
-      const shellId = this.getExplicitShellId();
-      const originUrl = this.getShellOriginUrl();
-
-      let url = `${API_BASE}/balance?origin_url=${encodeURIComponent(originUrl)}`;
-      if (this.userId) {
-        url += `&user_id=${encodeURIComponent(this.userId)}`;
-      }
-      if (shellId) {
-        url += `&shell_id=${encodeURIComponent(shellId)}`;
-      }
-
-      console.log('[M004] Balance URL:', url);
-      const response = await fetch(url);
-      const result = await response.json();
-      console.log('[M004] Balance response:', result);
-
-      if (result.status === 'success' && result.data) {
-        const balance = result.data.balance;
-        this.topupUrl = result.data.topup_url || null;
-
-        console.log('[M004] Balance value:', balance, 'Topup URL:', this.topupUrl);
-        if (valueEl) {
-          valueEl.textContent = balance.toFixed(2);
-          console.log('[M004] Set balance text to:', balance.toFixed(2));
+    const poll = async () => {
+      try {
+        const result = await api.getResearch(researchId);
+        if (result.status === 'success' && result.data) {
+          const data = result.data;
+          if (data.status === 'completed' && data.result) {
+            localStorage.removeItem('m004_pending_research');
+            this.updateProgress(100, i18n.t('progress.output'));
+            this.showResult(data.result, data.result.quality);
+            return;
+          } else if (data.status === 'failed') {
+            localStorage.removeItem('m004_pending_research');
+            this.showToast(i18n.t('errors.unknown'), 'error');
+            this.hideProgressUI();
+            return;
+          }
+          // Ещё в процессе — продолжаем polling
+          setTimeout(poll, 3000);
         }
-        if (updatedEl) {
-          updatedEl.textContent = `${i18n.t('balance.updatedAt')}: ${new Date().toLocaleTimeString(i18n.locale === 'ru' ? 'ru-RU' : 'en-US')}`;
-        }
-        this.updateTopupLink();
-      } else {
-        throw new Error(result.message || 'Balance fetch failed');
+      } catch (error) {
+        console.error('[M004] Poll error:', error);
+        localStorage.removeItem('m004_pending_research');
+        this.hideProgressUI();
       }
-    } catch (error) {
-      console.error('[M004] Failed to fetch balance:', error);
-      if (valueEl) {
-        valueEl.textContent = '--';
-      }
-      if (updatedEl) {
-        updatedEl.textContent = i18n.t('balance.error');
-      }
-    }
+    };
+
+    await poll();
   },
 
-  updateTopupLink() {
-    const topupBtn = document.getElementById('balance-topup');
-    if (topupBtn) {
-      if (this.topupUrl) {
-        topupBtn.href = this.topupUrl;
-        topupBtn.target = '_blank';
-        topupBtn.onclick = null;
-      } else {
-        topupBtn.href = '#';
-        topupBtn.removeAttribute('target');
-        topupBtn.onclick = (e) => {
-          e.preventDefault();
-          this.showToast(i18n.t('errors.topupUnavailable') || 'Ссылка для пополнения недоступна', 'error');
-        };
-      }
-    }
-  },
+  // Balance widget delegated to balance-widget.js
 
   async startResearch() {
     const queryInput = document.getElementById('query-input');
@@ -314,6 +259,7 @@ const app = {
       await this.handleSSEResponse(response);
     } catch (error) {
       console.error('Research failed:', error);
+      localStorage.removeItem('m004_pending_research');
       this.showToast(error.message, 'error');
       this.hideProgressUI();
     } finally {
@@ -360,6 +306,8 @@ const app = {
     switch (event.type) {
       case 'started':
         this.currentResearchId = event.research_id;
+        // Сохраняем ID для восстановления при обновлении страницы
+        localStorage.setItem('m004_pending_research', event.research_id);
         this.updateProgress(0, i18n.t('progress.preparing'));
         break;
 
@@ -379,11 +327,13 @@ const app = {
         break;
 
       case 'completed':
+        localStorage.removeItem('m004_pending_research');
         this.updateProgress(100, i18n.t('progress.output'));
         this.showResult(event.result, event.quality);
         break;
 
       case 'error':
+        localStorage.removeItem('m004_pending_research');
         this.showToast(event.message || i18n.t('errors.unknown'), 'error');
         this.hideProgressUI();
         break;
@@ -497,77 +447,153 @@ const app = {
     const container = document.getElementById('result-container');
     if (!container) return;
 
-    // Quality badge with tooltip
+    // Quality badge с понятным пояснением
     const qualityBadge = document.getElementById('quality-badge');
     if (qualityBadge && quality) {
       const score = quality.compositeScore || 0;
+      const pct = Math.round(score * 100);
       let level = 'low';
-      let label = i18n.t('result.qualityLow');
-      let hint = i18n.t('result.qualityLowHint');
+      let label, description;
 
-      if (score >= 0.8) {
-        level = 'high';
-        label = i18n.t('result.qualityHigh');
-        hint = i18n.t('result.qualityHighHint');
-      } else if (score >= 0.6) {
-        level = 'medium';
-        label = i18n.t('result.qualityMedium');
-        hint = i18n.t('result.qualityMediumHint');
+      if (i18n.locale === 'ru' || !i18n.locale) {
+        if (score >= 0.8) {
+          level = 'high';
+          label = 'Достоверность';
+          description = `${pct}% — Высокая: информация подтверждена несколькими авторитетными источниками. Можно использовать с уверенностью.`;
+        } else if (score >= 0.6) {
+          level = 'medium';
+          label = 'Достоверность';
+          description = `${pct}% — Средняя: основные факты проверены, но рекомендуется дополнительная проверка перед принятием решений.`;
+        } else {
+          level = 'low';
+          label = 'Достоверность';
+          description = `${pct}% — Требует проверки: информация собрана, но часть фактов не удалось подтвердить. Проверьте важные данные самостоятельно.`;
+        }
+      } else {
+        if (score >= 0.8) {
+          level = 'high';
+          label = 'Reliability';
+          description = `${pct}% — High: information confirmed by multiple authoritative sources. Can be used with confidence.`;
+        } else if (score >= 0.6) {
+          level = 'medium';
+          label = 'Reliability';
+          description = `${pct}% — Medium: key facts verified, but additional verification recommended before decision-making.`;
+        } else {
+          level = 'low';
+          label = 'Reliability';
+          description = `${pct}% — Needs review: information collected, but some facts could not be confirmed. Verify important data independently.`;
+        }
       }
 
       qualityBadge.className = `quality-badge ${level}`;
-      qualityBadge.textContent = `${label}: ${Math.round(score * 100)}%`;
-      qualityBadge.title = hint;
+      qualityBadge.innerHTML = `<span class="quality-label">${label}: ${pct}%</span>`;
+      qualityBadge.title = description;
+
+      // Добавляем пояснение под бейджем
+      let qualityExplainer = document.getElementById('quality-explainer');
+      if (!qualityExplainer) {
+        qualityExplainer = document.createElement('p');
+        qualityExplainer.id = 'quality-explainer';
+        qualityExplainer.className = 'quality-explainer';
+        qualityBadge.parentElement.after(qualityExplainer);
+      }
+      qualityExplainer.textContent = description;
+      qualityExplainer.className = `quality-explainer ${level}`;
     }
 
     // Report content
     const reportContent = document.getElementById('report-content');
     if (reportContent && result?.report) {
-      // Parse markdown to HTML
       reportContent.innerHTML = this.parseMarkdown(result.report);
     }
 
-    // Sources with meaningful tooltips
+    // Sources — понятное отображение на языке исследования
     const sourcesList = document.getElementById('sources-list');
     if (sourcesList && result?.sources) {
+      const lang = (result.metadata && result.metadata.language) || i18n.locale || 'ru';
+      const sourcesHeader = document.querySelector('.sources-section h3');
+      if (sourcesHeader) {
+        sourcesHeader.textContent = lang === 'ru' ? 'Использованные источники' : 'Sources used';
+      }
+
       sourcesList.innerHTML = result.sources.map((source, i) => {
         const authorityScore = source.authorityScore || source.authority || 0;
+        const authorityPct = Math.round(authorityScore * 100);
         const authorityClass = this.getAuthorityClass(authorityScore);
-        let authorityHint = i18n.t('result.authorityLow');
-        if (authorityScore >= 0.8) {
-          authorityHint = i18n.t('result.authorityHigh');
-        } else if (authorityScore >= 0.5) {
-          authorityHint = i18n.t('result.authorityMedium');
+
+        // Человекопонятное описание авторитетности
+        let authorityLabel, authorityDesc;
+        if (lang === 'ru') {
+          if (authorityScore >= 0.8) {
+            authorityLabel = 'Высокая надёжность';
+            authorityDesc = 'Авторитетный источник (официальный сайт, научное издание)';
+          } else if (authorityScore >= 0.5) {
+            authorityLabel = 'Средняя надёжность';
+            authorityDesc = 'Проверенный источник (отраслевое СМИ, известный портал)';
+          } else {
+            authorityLabel = 'Требует проверки';
+            authorityDesc = 'Источник нуждается в дополнительной верификации';
+          }
+        } else {
+          if (authorityScore >= 0.8) {
+            authorityLabel = 'Highly reliable';
+            authorityDesc = 'Authoritative source (official site, scientific publication)';
+          } else if (authorityScore >= 0.5) {
+            authorityLabel = 'Moderately reliable';
+            authorityDesc = 'Verified source (industry media, known portal)';
+          } else {
+            authorityLabel = 'Needs review';
+            authorityDesc = 'Source requires additional verification';
+          }
         }
 
+        // Определяем домен
+        let domain = source.domain || '';
+        if (!domain && source.url) {
+          try { domain = new URL(source.url).hostname; } catch { domain = ''; }
+        }
+
+        // Название источника: если нет title или title = Unknown, показываем домен
+        const title = (source.title && source.title !== 'Unknown source' && source.title !== 'unknown')
+          ? source.title
+          : domain || (lang === 'ru' ? 'Источник без названия' : 'Untitled source');
+
+        const url = source.url && source.url !== '#' && source.url !== 'undefined' ? source.url : null;
+
         return `
-        <div class="source-item">
-          <span class="source-index">[${i + 1}]</span>
-          <div class="source-content">
-            <div class="source-title">
-              <a href="${source.url || '#'}" target="_blank" rel="noopener">${source.title || source.url || 'Unknown source'}</a>
-              <span class="source-authority ${authorityClass}" title="${authorityHint}">
-                ${Math.round(authorityScore * 100)}%
-              </span>
+        <a href="${url || '#'}" target="${url ? '_blank' : '_self'}" rel="noopener noreferrer" class="source-item-link" ${!url ? 'onclick="event.preventDefault()"' : ''}>
+          <div class="source-item">
+            <span class="source-index">[${i + 1}]</span>
+            <div class="source-content">
+              <div class="source-title-text">${this.escapeHtml(title)}</div>
+              ${domain ? `<div class="source-domain">${this.escapeHtml(domain)}</div>` : ''}
+              <div class="source-authority-info">
+                <span class="source-authority ${authorityClass}" title="${authorityDesc}">
+                  ${authorityLabel} (${authorityPct}%)
+                </span>
+              </div>
             </div>
-            <div class="source-domain">${source.domain || (() => { try { return new URL(source.url).hostname; } catch { return source.url || 'unknown'; } })()}</div>
           </div>
-        </div>
+        </a>
       `}).join('');
     }
 
-    // Export buttons
+    // Export buttons — правильная загрузка файлов
     if (this.currentResearchId) {
       const exportMd = document.getElementById('export-md');
       const exportJson = document.getElementById('export-json');
 
       if (exportMd) {
+        exportMd.href = '#';
+        exportMd.removeAttribute('download');
         exportMd.onclick = (e) => {
           e.preventDefault();
           this.downloadFile(this.currentResearchId, 'markdown');
         };
       }
       if (exportJson) {
+        exportJson.href = '#';
+        exportJson.removeAttribute('download');
         exportJson.onclick = (e) => {
           e.preventDefault();
           this.downloadFile(this.currentResearchId, 'json');
@@ -664,6 +690,15 @@ const app = {
     container.className = 'toast-container';
     document.body.appendChild(container);
     return container;
+  },
+
+  /**
+   * Экранирует HTML для безопасного вывода
+   */
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 };
 

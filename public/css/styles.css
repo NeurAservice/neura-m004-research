@@ -311,7 +311,9 @@ body {
 
 textarea.form-control {
   min-height: 120px;
+  max-height: 500px;
   resize: vertical;
+  overflow-y: auto;
 }
 
 .form-control::placeholder {
@@ -916,3 +918,70 @@ textarea.form-control {
     align-items: flex-start;
   }
 }
+
+/* Quality Explainer — пояснение под бейджем качества */
+.quality-explainer {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.quality-explainer.high {
+  color: var(--success-color);
+  background: rgba(40, 167, 69, 0.1);
+}
+
+.quality-explainer.medium {
+  color: var(--warning-color);
+  background: rgba(255, 193, 7, 0.1);
+}
+
+.quality-explainer.low {
+  color: var(--danger-color);
+  background: rgba(220, 53, 69, 0.1);
+}
+
+/* Source items — кликабельные карточки-ссылки */
+.source-item-link {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  border-radius: var(--border-radius);
+  transition: var(--transition);
+}
+
+.source-item-link:hover .source-item {
+  border-color: var(--primary-color);
+  background: var(--bg-tertiary);
+}
+
+.source-item-link:hover .source-title-text {
+  color: var(--primary-color);
+}
+
+.source-title-text {
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+  color: var(--text-primary);
+  transition: color 0.2s ease;
+}
+
+.source-authority-info {
+  margin-top: 0.375rem;
+}
+
+.source-authority-info .source-authority {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  display: inline-block;
+}
+
+/* Progress text animation */
+#progress-text {
+  transition: opacity 0.15s ease;
+}
+
