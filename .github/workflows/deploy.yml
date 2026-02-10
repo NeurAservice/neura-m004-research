@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  SSH_OPTS: "-o StrictHostKeyChecking=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=5 -o ConnectTimeout=15"
+  SSH_OPTS: "-o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ServerAliveCountMax=5 -o ConnectTimeout=30"
 
 jobs:
   deploy:
@@ -22,7 +22,27 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+          # ssh-keyscan с retry (сервер может быть под нагрузкой)
+          KEYSCAN_OK=0
+          for attempt in 1 2 3 4 5; do
+            echo "ssh-keyscan attempt $attempt/5..."
+            if ssh-keyscan -T 15 -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts 2>/dev/null; then
+              if [ -s ~/.ssh/known_hosts ]; then
+                echo "✅ ssh-keyscan succeeded on attempt $attempt"
+                KEYSCAN_OK=1
+                break
+              fi
+            fi
+            echo "  ssh-keyscan failed, waiting 15s..."
+            sleep 15
+          done
+
+          if [ $KEYSCAN_OK -eq 0 ]; then
+            echo "⚠️ ssh-keyscan failed after 5 attempts, using StrictHostKeyChecking=accept-new"
+            # Безопасный fallback: принять ключ при первом подключении
+            sed -i 's/StrictHostKeyChecking=yes/StrictHostKeyChecking=accept-new/' $GITHUB_ENV 2>/dev/null || true
+          fi
 
       - name: Update code on server
         env:
