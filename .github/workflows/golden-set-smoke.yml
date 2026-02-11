@@ -32,8 +32,10 @@ jobs:
                     -o StrictHostKeyChecking=yes \
                     -o ServerAliveInterval=30 \
                     -p ${{ secrets.SSH_PORT }} \
-                    ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
-                  echo "SSH tunnel established"
+                    ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} &
+                  SSH_PID=$!
+                  echo "SSH_PID=$SSH_PID" >> $GITHUB_ENV
+                  echo "SSH tunnel established with PID $SSH_PID"
                   sleep 2
                   # Verify tunnel works
                   curl -sf http://localhost:3004/health || (echo "Tunnel health check failed" && exit 1)
@@ -114,4 +116,7 @@ jobs:
 
             - name: Close SSH tunnel
               if: always()
-              run: pkill -f "ssh.*-L 3004" || true
+              run: |
+                  if [ -n "${SSH_PID:-}" ]; then
+                    kill $SSH_PID 2>/dev/null || true
+                  fi
