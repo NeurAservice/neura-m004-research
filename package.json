@@ -19,7 +19,7 @@
     "dotenv": "^16.3.1",
     "uuid": "^9.0.1",
     "winston": "^3.11.0",
-    "better-sqlite3": "^9.4.3",
+    "better-sqlite3": "^12.6.2",
     "marked": "^12.0.0"
   },
   "devDependencies": {

@@ -47,7 +47,7 @@ export function preTriage(query: string): PreTriageResult {
   }
 
   // 3. Структурные блоки (нумерованные списки, markdown-структура)
-  const numberedItems = (query.match(/^\s*\d+[\.\)]/gm) || []).length;
+  const numberedItems = (query.match(/^\s*\d+[.)]/gm) || []).length;
   const bulletItems = (query.match(/^\s*[-*•]/gm) || []).length;
   const structuralBlocks = numberedItems + bulletItems;
   if (structuralBlocks >= 3) {
