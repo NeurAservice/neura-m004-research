@@ -3,7 +3,7 @@
   "name": "NeurA Research",
   "nameRu": "NeurA Research",
   "nameEn": "NeurA Research",
-  "version": "2.3.0",
+  "version": "2.5.0",
   "description": "Модуль глубоких верифицированных исследований",
   "descriptionRu": "Модуль глубоких верифицированных исследований с проверкой фактов",
   "descriptionEn": "Deep research module with fact verification",
@@ -14,10 +14,15 @@
     "Глубокие исследования с верификацией",
     "Multi-model pipeline (Perplexity + Claude + OpenAI)",
     "Token Budget Control с circuit breaker",
-    "Source Authority Scoring",
-    "3 режима: simple / standard / deep",
+    "Source Authority Scoring и SourceRegistry",
+    "3 режима: simple / standard / deep + auto",
+    "Quality Gate (A/B/C/F grading)",
+    "Pre-Triage эвристики",
+    "Stats Collector и аналитика",
+    "Adaptive Verification",
     "Экспорт в Markdown/PDF/JSON",
-    "Internal API для других модулей"
+    "Internal API для других модулей",
+    "Golden Set smoke testing"
   ],
   "aiModels": [
     "perplexity/sonar-pro",
